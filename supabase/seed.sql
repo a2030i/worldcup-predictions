@@ -1,4 +1,7 @@
 -- بذرة البيانات: التحدي العام + مباريات دور المجموعات (مولّد تلقائيًا)
+-- الجداول في سكيما wc (معزولة عن تطبيق آخر يشارك نفس مشروع Supabase)
+set search_path = wc, public;
+
 insert into challenges (id, type, name, code, scope)
 values ('00000000-0000-0000-0000-000000000001', 'public', 'التحدي العام', null, 'all')
 on conflict (id) do nothing;

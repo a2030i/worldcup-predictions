@@ -1,3 +1,4 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-export default defineConfig({ plugins: [react()] });
+// base نسبي ليعمل البناء على GitHub Pages (مسار فرعي) وعلى أي استضافة
+export default defineConfig({ base: "./", plugins: [react()] });
