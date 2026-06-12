@@ -40,11 +40,13 @@ export default function App() {
   };
   useEffect(refresh, [session]);
   // تحديث دوري — النتائج واللوحات تتجدد دون إعادة تحميل الصفحة
+  // أثناء مباراة حية: كل 20 ثانية ليصل الهدف بأسرع ما يمكن
+  const hasLive = (matches || []).some((x) => x.live_h != null && x.status === "scheduled");
   useEffect(() => {
     if (!session) return;
-    const t = setInterval(refresh, 60_000);
+    const t = setInterval(refresh, hasLive ? 20_000 : 60_000);
     return () => clearInterval(t);
-  }, [session]);
+  }, [session, hasLive]);
 
   if (!session) return <Shell><AuthScreen onAuth={setSession} /></Shell>;
 
@@ -112,9 +114,24 @@ function Shell({ children }) {
         button:active { transform: scale(0.98); }
         @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+        @keyframes goalpop {
+          0% { transform: scale(0.4); opacity: 0; }
+          45% { transform: scale(1.18); opacity: 1; }
+          70% { transform: scale(0.96); }
+          100% { transform: scale(1); }
+        }
+        @keyframes scoreflash {
+          0% { transform: scale(1.6); color: #FFFFFF; text-shadow: 0 0 14px rgba(246,196,83,0.9); }
+          100% { transform: scale(1); }
+        }
         @media (prefers-reduced-motion: reduce) { .block { animation: none } }
       `}</style>
-      <div className="wrap">{children}</div>
+      <div className="wrap">
+        {children}
+        <p style={{ color: "#6E74A8", fontSize: 10, textAlign: "center", marginTop: 34, opacity: 0.75, lineHeight: 1.8 }}>
+          منصة مجتمعية مستقلة للتوقعات بين الأصدقاء — غير تابعة للاتحاد الدولي لكرة القدم (FIFA) وغير مرتبطة به ولا معتمدة منه.
+        </p>
+      </div>
     </div>
   );
 }

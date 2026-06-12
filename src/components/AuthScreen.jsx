@@ -51,9 +51,9 @@ export default function AuthScreen({ onAuth }) {
     <div className="block" style={{ maxWidth: 380, margin: "7vh auto 0" }}>
       <div style={{ textAlign: "center", marginBottom: 22 }}>
         <div style={{ color: C.gold }}><BallIcon size={46} style={{ strokeWidth: 1.4 }} /></div>
-        <h1 style={{ color: C.text, fontSize: 26, fontWeight: 900, margin: "8px 0 4px" }}>تحدي توقعات كأس العالم</h1>
+        <h1 style={{ color: C.text, fontSize: 26, fontWeight: 900, margin: "8px 0 4px" }}>تحدي التوقعات</h1>
         <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.8, margin: 0 }}>
-          توقّع نتائج مونديال 2026 ونافس الجميع على الصدارة
+          توقّع نتائج مباريات المونديال 2026 ونافس الجميع على الصدارة
         </p>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction } from "../lib/api";
@@ -215,7 +215,7 @@ const Note = ({ children, muted, gold }) => (
   }}>{children}</div>
 );
 
-function Team({ code, goals, lead }) {
+function Team({ code, goals, lead, flash }) {
   const strong = code === "SA" || lead;
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -223,7 +223,11 @@ function Team({ code, goals, lead }) {
         <span style={{ fontSize: 22, lineHeight: 1 }}>{flag(code)}</span>
         <span style={{ color: strong ? C.gold : C.text, fontSize: 16, fontWeight: strong ? 800 : 600 }}>{NAMES[code] || code}</span>
       </div>
-      {goals != null && <span className="num" style={{ color: lead ? C.gold : C.text, fontWeight: 800, fontSize: 17, minWidth: 22, textAlign: "center" }}>{goals}</span>}
+      {goals != null && (
+        <span key={goals} className="num" style={{ color: lead ? C.gold : C.text, fontWeight: 800, fontSize: 17, minWidth: 22,
+          textAlign: "center", display: "inline-block",
+          animation: flash ? "scoreflash 1s ease" : "none" }}>{goals}</span>
+      )}
     </div>
   );
 }
@@ -236,6 +240,21 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const gB = fin ? state.result_a : live ? state.live_a : null;
   const ksaWon = fin && ksa &&
     ((m.a === "SA" && state.result_h > state.result_a) || (m.b === "SA" && state.result_a > state.result_h));
+
+  // كشف الهدف: ارتفاع النتيجة الحية بين تحديثين ← احتفال 12 ثانية
+  const [goal, setGoal] = useState(null); // 'a' | 'b' | 'both'
+  const prevLive = useRef({ h: state?.live_h, a: state?.live_a });
+  useEffect(() => {
+    const ph = prevLive.current.h, pa = prevLive.current.a;
+    const nh = state?.live_h, na = state?.live_a;
+    if (nh != null && ph != null && (nh > ph || na > pa)) {
+      setGoal(nh > ph && na > pa ? "both" : nh > ph ? "a" : "b");
+      const t = setTimeout(() => setGoal(null), 12_000);
+      prevLive.current = { h: nh, a: na };
+      return () => clearTimeout(t);
+    }
+    prevLive.current = { h: nh, a: na };
+  }, [state?.live_h, state?.live_a]);
   return (
     <div style={{
       padding: "14px 6px", borderBottom: last ? "none" : `1px solid ${C.line}`,
@@ -265,9 +284,9 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-          <Team code={m.a} goals={gA} lead={gA != null && gA > gB} />
+          <Team code={m.a} goals={gA} lead={gA != null && gA > gB} flash={live && (goal === "a" || goal === "both")} />
           <div style={{ height: 1, background: C.line, width: "100%" }} />
-          <Team code={m.b} goals={gB} lead={gB != null && gB > gA} />
+          <Team code={m.b} goals={gB} lead={gB != null && gB > gA} flash={live && (goal === "b" || goal === "both")} />
           {fin && (
             <span style={{ alignSelf: "flex-start", marginTop: 3, fontSize: 11, fontWeight: 700, padding: "2px 8px",
               borderRadius: 999, color: ksaWon ? KSA_GREEN : C.green,
@@ -276,10 +295,19 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
             </span>
           )}
           {live && (
-            <span style={{ alignSelf: "flex-start", marginTop: 3, fontSize: 11, fontWeight: 800, padding: "2px 10px",
-              borderRadius: 999, color: C.red, background: "rgba(255,107,107,0.13)",
-              border: "1px solid rgba(255,107,107,0.35)", animation: "pulse 1.6s infinite" }}>
-              ● مباشر الآن
+            <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 10px",
+                borderRadius: 999, color: C.red, background: "rgba(255,107,107,0.13)",
+                border: "1px solid rgba(255,107,107,0.35)", animation: "pulse 1.6s infinite" }}>
+                ● مباشر الآن
+              </span>
+              {goal && (
+                <span style={{ fontSize: 12, fontWeight: 900, padding: "3px 12px", borderRadius: 999,
+                  color: "#2A1B00", background: "linear-gradient(135deg,#F6C453,#E0962F)",
+                  boxShadow: "0 0 16px rgba(246,196,83,0.55)", animation: "goalpop .9s ease" }}>
+                  هدف{goal === "a" ? ` لـ${NAMES[m.a]}` : goal === "b" ? ` لـ${NAMES[m.b]}` : ""}!
+                </span>
+              )}
             </span>
           )}
         </div>
