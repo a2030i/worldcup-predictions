@@ -24,14 +24,33 @@ create schema if not exists wc;
 -- ───────────────────────── الجداول ─────────────────────────
 
 create table if not exists wc.profiles (
-  id         uuid primary key default gen_random_uuid(),
-  username   text unique not null check (char_length(trim(username)) between 2 and 20),
-  pin_hash   text not null,
-  token      uuid unique not null default gen_random_uuid(),
-  is_admin   boolean not null default false,
-  is_banned  boolean not null default false,
-  created_at timestamptz not null default now()
+  id           uuid primary key default gen_random_uuid(),
+  username     text unique not null check (char_length(trim(username)) between 2 and 20), -- اسم الدخول (إنجليزي/أرقام — يُفرض في register_user)
+  display_name text,                                  -- الاسم الظاهر في اللوحات
+  phone        text,                                  -- 05xxxxxxxx للتواصل عند الجوائز
+  pin_hash     text not null,
+  token        uuid unique not null default gen_random_uuid(),
+  is_admin     boolean not null default false,
+  is_banned    boolean not null default false,
+  created_at   timestamptz not null default now()
 );
+
+-- ترقية القواعد القائمة + قيود الهوية (آمنة لإعادة التنفيذ)
+alter table wc.profiles add column if not exists display_name text;
+alter table wc.profiles add column if not exists phone text;
+update wc.profiles set display_name = username where display_name is null;
+alter table wc.profiles alter column display_name set not null;
+do $$ begin
+  alter table wc.profiles add constraint profiles_display_name_len
+    check (char_length(trim(display_name)) between 2 and 20);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table wc.profiles add constraint profiles_phone_format
+    check (phone is null or phone ~ '^05[0-9]{8}$');
+exception when duplicate_object then null; end $$;
+create unique index if not exists profiles_username_lower_unique on wc.profiles (lower(trim(username)));
+create unique index if not exists profiles_display_name_unique on wc.profiles (lower(trim(display_name)));
+create unique index if not exists profiles_phone_unique on wc.profiles (phone) where phone is not null;
 
 create table if not exists wc.challenges (
   id          uuid primary key default gen_random_uuid(),
@@ -155,17 +174,34 @@ end $$;
 
 -- ───────────────── دوال API (في public — هي الوحيدة المعروضة) ─────────────────
 
-create or replace function public.register_user(p_username text, p_pin text)
-returns json language plpgsql security definer set search_path = wc, public, extensions as $$
+-- التسجيل: اسم دخول إنجليزي + اسم عرض + جوال سعودي + PIN
+drop function if exists public.register_user(text, text);
+
+create or replace function public.register_user(
+  p_username text, p_pin text, p_display_name text, p_phone text
+) returns json language plpgsql security definer set search_path = wc, public, extensions as $$
 declare u wc.profiles;
 begin
+  if trim(p_username) !~ '^[A-Za-z0-9_]{3,20}$' then raise exception 'USERNAME_INVALID'; end if;
   if p_pin !~ '^[0-9]{4,6}$' then raise exception 'PIN_INVALID'; end if;
-  insert into wc.profiles (username, pin_hash)
-  values (trim(p_username), crypt(p_pin, gen_salt('bf')))
+  if char_length(trim(coalesce(p_display_name,''))) not between 2 and 20 then raise exception 'DISPLAY_INVALID'; end if;
+  if p_phone !~ '^05[0-9]{8}$' then raise exception 'PHONE_INVALID'; end if;
+
+  -- رسائل خطأ مميزة لكل تعارض (السباق النادر يلتقطه unique_violation أدناه)
+  if exists (select 1 from wc.profiles where lower(trim(username)) = lower(trim(p_username))) then
+    raise exception 'USERNAME_TAKEN'; end if;
+  if exists (select 1 from wc.profiles where lower(trim(display_name)) = lower(trim(p_display_name))) then
+    raise exception 'DISPLAY_TAKEN'; end if;
+  if exists (select 1 from wc.profiles where phone = p_phone) then
+    raise exception 'PHONE_TAKEN'; end if;
+
+  insert into wc.profiles (username, pin_hash, display_name, phone)
+  values (trim(p_username), crypt(p_pin, gen_salt('bf')), trim(p_display_name), p_phone)
   returning * into u;
   -- انضمام تلقائي للتحدي العام
   insert into wc.memberships (user_id, challenge_id) values (u.id, wc.public_challenge_id());
-  return json_build_object('token', u.token, 'username', u.username, 'is_admin', u.is_admin);
+  return json_build_object('token', u.token, 'username', u.username,
+                           'display_name', u.display_name, 'is_admin', u.is_admin);
 exception when unique_violation then
   raise exception 'USERNAME_TAKEN';
 end $$;
@@ -179,7 +215,8 @@ begin
     and pin_hash = crypt(p_pin, pin_hash);
   if u.id is null then raise exception 'LOGIN_FAILED'; end if;
   if u.is_banned then raise exception 'AUTH_BANNED'; end if;
-  return json_build_object('token', u.token, 'username', u.username, 'is_admin', u.is_admin);
+  return json_build_object('token', u.token, 'username', u.username,
+                           'display_name', u.display_name, 'is_admin', u.is_admin);
 end $$;
 
 -- ───────────────────── التوقعات ─────────────────────
@@ -239,14 +276,14 @@ begin
     then raise exception 'NOT_A_MEMBER'; end if;
 
   return query
-  select pr.username,
+  select pr.display_name,  -- مفتاح JSON يبقى username لتوافق الواجهة
          p.h, p.a, p.qualified,
          wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)
   from wc.predictions p
   join wc.memberships mb on mb.user_id = p.user_id and mb.challenge_id = p_challenge_id
   join wc.profiles pr on pr.id = p.user_id
   where p.match_id = p_match_id
-  order by 5 desc, pr.username;
+  order by 5 desc, pr.display_name;
 end $$;
 
 -- ───────────────────── التحديات ─────────────────────
@@ -319,7 +356,7 @@ begin
     then raise exception 'NOT_A_MEMBER'; end if;
 
   return query
-  select pr.username,
+  select pr.display_name,  -- مفتاح JSON يبقى username لتوافق الواجهة
     coalesce(sum(wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)), 0),
     count(*) filter (where p.h = m.result_h and p.a = m.result_a),
     count(*) filter (where sign(p.h - p.a) = sign(m.result_h - m.result_a)),
@@ -331,8 +368,8 @@ begin
        and m.status = 'finished'
        and m.kickoff_at >= mb.joined_at   -- عدالة الانضمام المتأخر
   where mb.challenge_id = p_challenge_id
-  group by pr.username
-  order by 2 desc, 3 desc, 4 desc, pr.username;
+  group by pr.display_name
+  order by 2 desc, 3 desc, 4 desc, pr.display_name;
 end $$;
 
 -- ───────────────────── لوحة الأدمن ─────────────────────
@@ -377,7 +414,8 @@ begin
     select h, a, count(*) as n from wc.predictions
     where match_id = p_match_id group by h, a order by n desc limit 10) t;
   select coalesce(json_agg(t), '[]') into suspicious from (
-    select pr.username, p.updated_at from wc.predictions p
+    select pr.display_name || ' (' || pr.username || ')' as username, p.updated_at
+    from wc.predictions p
     join wc.profiles pr on pr.id = p.user_id
     where p.match_id = p_match_id
       and p.updated_at > wc.lock_at(m) - interval '60 seconds') t;
@@ -432,7 +470,7 @@ revoke execute on all functions in schema wc from anon, authenticated, public;
 revoke usage on schema wc from anon, authenticated, public;
 
 grant execute on function
-  public.register_user(text, text),
+  public.register_user(text, text, text, text),
   public.login_user(text, text),
   public.submit_prediction(uuid, text, int, int, text),
   public.get_matches(uuid),

@@ -11,7 +11,12 @@ export const clearSession = () => localStorage.removeItem(KEY);
 
 // رسائل الأخطاء القادمة من قاعدة البيانات بالعربي
 const ERRORS = {
-  USERNAME_TAKEN: "الاسم محجوز، جرّب اسمًا آخر",
+  USERNAME_TAKEN: "اسم الدخول محجوز، جرّب اسمًا آخر",
+  USERNAME_INVALID: "اسم الدخول: حروف إنجليزية وأرقام فقط (3–20 خانة)",
+  DISPLAY_TAKEN: "اسم العرض محجوز، اختر اسمًا آخر",
+  DISPLAY_INVALID: "اسم العرض: من حرفين إلى 20 حرفًا",
+  PHONE_TAKEN: "هذا الجوال مسجّل بحساب آخر",
+  PHONE_INVALID: "رقم الجوال يبدأ بـ 05 ويتكون من 10 أرقام",
   LOGIN_FAILED: "الاسم أو الرمز غير صحيح",
   PIN_INVALID: "الرمز يجب أن يكون 4 إلى 6 أرقام",
   AUTH_BANNED: "تم إيقاف هذا الحساب",
@@ -37,7 +42,8 @@ async function rpc(fn, args) {
 const tok = () => getSession()?.token;
 
 // ── الحساب ──
-export const register = (username, pin) => rpc("register_user", { p_username: username, p_pin: pin });
+export const register = (username, pin, displayName, phone) =>
+  rpc("register_user", { p_username: username, p_pin: pin, p_display_name: displayName, p_phone: phone });
 export const login    = (username, pin) => rpc("login_user", { p_username: username, p_pin: pin });
 
 // ── المباريات والتوقعات ──

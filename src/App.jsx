@@ -37,7 +37,7 @@ export default function App() {
         <div style={{ color: C.gold, fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>🏆 كأس العالم 2026</div>
         <h1 style={{ color: C.text, fontSize: 28, fontWeight: 900, margin: "4px 0 6px" }}>تحدي التوقعات</h1>
         <div style={{ color: C.muted, fontSize: 12.5 }}>
-          أهلاً <b style={{ color: C.gold }}>{session.username}</b>
+          أهلاً <b style={{ color: C.gold }}>{session.displayName || session.username}</b>
           {" · "}
           <button onClick={() => { clearSession(); setSession(null); }}
             style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, textDecoration: "underline" }}>
