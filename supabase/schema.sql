@@ -282,12 +282,14 @@ end $$;
 
 -- مبارياتي: حالة كل مباراة + نتيجتها + توقعي + عدد المتوقعين
 -- server_now: لمزامنة عدّادات الواجهة بساعة الخادم (تغيير ساعة الجهاز لا يؤثر)
+-- live_h/live_a: النتيجة اللحظية أثناء اللعب (من المزامنة التلقائية)
 drop function if exists public.get_matches(uuid);
 create or replace function public.get_matches(p_token uuid)
 returns table (
   id text, status text, stage text, kickoff_at timestamptz, locks_at timestamptz,
   result_h int, result_a int, qualified text,
-  my_h int, my_a int, my_qualified text, predictors bigint, server_now timestamptz
+  my_h int, my_a int, my_qualified text, predictors bigint, server_now timestamptz,
+  live_h int, live_a int
 ) language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles;
 begin
@@ -297,7 +299,7 @@ begin
          m.result_h, m.result_a, m.qualified,
          p.h, p.a, p.qualified,
          (select count(*) from wc.predictions x where x.match_id = m.id),
-         now()
+         now(), m.live_h, m.live_a
   from wc.matches m
   left join wc.predictions p on p.match_id = m.id and p.user_id = u.id
   order by m.kickoff_at;
@@ -546,7 +548,9 @@ begin
     'top_challenges', (select coalesce(json_agg(x), '[]') from (
        select c.name, count(mb.user_id) as members from wc.challenges c
        join wc.memberships mb on mb.challenge_id = c.id
-       where c.type = 'private' group by c.id, c.name order by 2 desc limit 3) x)
+       where c.type = 'private' group by c.id, c.name order by 2 desc limit 3) x),
+    'sync', (select json_build_object('enabled', enabled, 'last_run', last_run, 'last_status', last_status)
+             from wc.sync_config where id)
   );
 end $$;
 
@@ -734,6 +738,139 @@ begin
   from wc.audit_log a left join wc.profiles pr on pr.id = a.admin_id
   order by a.id desc limit least(coalesce(p_limit, 50), 200);
 end $$;
+
+-- ───────────── التحديث التلقائي للنتائج (pg_cron + http) ─────────────
+-- كل دقيقتين أثناء نوافذ اللعب: جلب النتائج من football-data.org —
+-- النهائية تُعتمد تلقائيًا (لا تلمس ما اعتمده الأدمن)، والجارية تظهر «مباشر»
+-- ⚠️ المفتاح يُحفظ في wc.sync_config على القاعدة مباشرة — لا تضعه في هذا الملف (المستودع عام)
+
+create extension if not exists http with schema extensions;
+
+alter table wc.matches add column if not exists live_h int;
+alter table wc.matches add column if not exists live_a int;
+
+-- خريطة أكواد منتخباتنا ← أكواد football-data (تحقق 72/72 مباراة)
+create table if not exists wc.team_map (
+  code   text primary key,
+  fd_tla text unique not null
+);
+insert into wc.team_map (code, fd_tla) values
+  ('MX','MEX'),('ZA','RSA'),('KR','KOR'),('CZ','CZE'),('CA','CAN'),('BA','BIH'),
+  ('US','USA'),('PY','PAR'),('QA','QAT'),('CH','SUI'),('BR','BRA'),('MA','MAR'),
+  ('HT','HAI'),('SCO','SCO'),('AU','AUS'),('TR','TUR'),('DE','GER'),('CW','CUW'),
+  ('NL','NED'),('JP','JPN'),('CI','CIV'),('EC','ECU'),('SE','SWE'),('TN','TUN'),
+  ('ES','ESP'),('CV','CPV'),('BE','BEL'),('EG','EGY'),('SA','KSA'),('UY','URY'),
+  ('IR','IRN'),('NZ','NZL'),('FR','FRA'),('SN','SEN'),('IQ','IRQ'),('NO','NOR'),
+  ('AR','ARG'),('DZ','ALG'),('AT','AUT'),('JO','JOR'),('PT','POR'),('CD','COD'),
+  ('ENG','ENG'),('HR','CRO'),('GH','GHA'),('PA','PAN'),('UZ','UZB'),('CO','COL')
+on conflict (code) do update set fd_tla = excluded.fd_tla;
+
+create table if not exists wc.sync_config (
+  id          boolean primary key default true check (id),
+  api_token   text not null,
+  enabled     boolean not null default true,
+  last_run    timestamptz,
+  last_status text
+);
+alter table wc.sync_config enable row level security;
+alter table wc.team_map    enable row level security;
+-- التفعيل (مرة واحدة، بمفتاحك الحقيقي):
+-- insert into wc.sync_config (id, api_token, enabled) values (true, 'YOUR_FOOTBALL_DATA_TOKEN', true)
+--   on conflict (id) do update set api_token = excluded.api_token, enabled = true;
+
+create or replace function wc.sync_results(p_force boolean default false)
+returns text language plpgsql security definer
+set search_path = wc, public, extensions
+set statement_timeout = '25s'
+as $$
+declare
+  cfg wc.sync_config; resp record; payload jsonb; x jsonb;
+  home_code text; away_code text; m wc.matches;
+  fh int; fa int; rh int; ra int;
+  n_fin int := 0; n_live int := 0; msg text;
+begin
+  select * into cfg from wc.sync_config where id;
+  if cfg.id is null or not cfg.enabled then return 'disabled'; end if;
+
+  -- لا نسأل الـAPI إلا عند وجود مباريات في نافذة اللعب (توفير الحصة)
+  if not p_force and not exists (
+    select 1 from wc.matches
+    where status = 'scheduled'
+      and kickoff_at between now() - interval '4 hours' and now() + interval '10 minutes'
+  ) then
+    update wc.sync_config set last_run = now(), last_status = 'idle — لا مباريات في النافذة' where id;
+    return 'idle';
+  end if;
+
+  -- المهلة الافتراضية لامتداد http قصيرة جدًا — تُضبط لكل جلسة
+  perform http_set_curlopt('CURLOPT_TIMEOUT', '15');
+  perform http_set_curlopt('CURLOPT_CONNECTTIMEOUT', '8');
+
+  select status, content into resp from http((
+    'GET',
+    'https://api.football-data.org/v4/competitions/WC/matches?dateFrom='
+      || to_char(now() - interval '1 day', 'YYYY-MM-DD')
+      || '&dateTo=' || to_char(now() + interval '1 day', 'YYYY-MM-DD'),
+    ARRAY[http_header('X-Auth-Token', cfg.api_token)],
+    null, null
+  )::http_request);
+
+  if resp.status <> 200 then
+    msg := 'HTTP ' || resp.status;
+    update wc.sync_config set last_run = now(), last_status = msg where id;
+    return msg;
+  end if;
+
+  payload := resp.content::jsonb;
+  for x in select * from jsonb_array_elements(payload->'matches') loop
+    select code into home_code from wc.team_map where fd_tla = x#>>'{homeTeam,tla}';
+    select code into away_code from wc.team_map where fd_tla = x#>>'{awayTeam,tla}';
+    if home_code is null or away_code is null then continue; end if;
+
+    select * into m from wc.matches
+    where kickoff_at = (x->>'utcDate')::timestamptz
+      and ((team_a = home_code and team_b = away_code)
+        or (team_a = away_code and team_b = home_code));
+    if m.id is null then continue; end if;
+
+    fh := (x#>>'{score,fullTime,home}')::int;
+    fa := (x#>>'{score,fullTime,away}')::int;
+    if m.team_a = home_code then rh := fh; ra := fa; else rh := fa; ra := fh; end if;
+
+    case x->>'status'
+      when 'FINISHED' then
+        -- لا نلمس ما اعتمده/صححه الأدمن — التلقائي يعتمد المجدولة فقط
+        if m.status = 'scheduled' and rh is not null and ra is not null then
+          update wc.matches set result_h = rh, result_a = ra,
+                                 status = 'finished', live_h = null, live_a = null
+          where id = m.id;
+          n_fin := n_fin + 1;
+          insert into wc.audit_log (admin_id, action, details)
+          values (null, 'auto_result',
+                  jsonb_build_object('match', m.id, 'h', rh, 'a', ra, 'source', 'football-data.org'));
+        end if;
+      when 'IN_PLAY', 'PAUSED' then
+        if m.status = 'scheduled' then
+          update wc.matches set live_h = coalesce(rh, 0), live_a = coalesce(ra, 0) where id = m.id;
+          n_live := n_live + 1;
+        end if;
+      else null;
+    end case;
+  end loop;
+
+  msg := 'ok — اعتُمدت ' || n_fin || ' · مباشرة ' || n_live;
+  update wc.sync_config set last_run = now(), last_status = msg where id;
+  return msg;
+exception when others then
+  update wc.sync_config set last_run = now(), last_status = 'خطأ: ' || sqlerrm where id;
+  return 'error: ' || sqlerrm;
+end $$;
+
+-- الجدولة (pg_cron مثبّت في المشروع): كل دقيقتين
+do $job$ begin
+  perform cron.unschedule('wc26-sync-results');
+exception when others then null; end $job$;
+select cron.schedule('wc26-sync-results', '*/2 * * * *', 'select wc.sync_results()');
 
 -- ───────────────────── الصلاحيات ─────────────────────
 -- سكيما wc مقفلة بالكامل (لا usage لـ anon) — الوصول فقط عبر دوال API أعلاه

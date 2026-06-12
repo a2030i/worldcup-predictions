@@ -214,6 +214,9 @@ function Team({ code, goals, lead }) {
 function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksa = m.a === "SA" || m.b === "SA";
   const fin = state?.status === "finished";
+  const live = !fin && state?.live_h != null; // نتيجة لحظية من المزامنة التلقائية
+  const gA = fin ? state.result_h : live ? state.live_h : null;
+  const gB = fin ? state.result_a : live ? state.live_a : null;
   const ksaWon = fin && ksa &&
     ((m.a === "SA" && state.result_h > state.result_a) || (m.b === "SA" && state.result_a > state.result_h));
   return (
@@ -245,14 +248,21 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-          <Team code={m.a} goals={fin ? state.result_h : null} lead={fin && state.result_h > state.result_a} />
+          <Team code={m.a} goals={gA} lead={gA != null && gA > gB} />
           <div style={{ height: 1, background: C.line, width: "100%" }} />
-          <Team code={m.b} goals={fin ? state.result_a : null} lead={fin && state.result_a > state.result_h} />
+          <Team code={m.b} goals={gB} lead={gB != null && gB > gA} />
           {fin && (
             <span style={{ alignSelf: "flex-start", marginTop: 3, fontSize: 11, fontWeight: 700, padding: "2px 8px",
               borderRadius: 999, color: ksaWon ? KSA_GREEN : C.green,
               background: ksaWon ? "rgba(43,180,93,0.16)" : "rgba(139,228,155,0.12)" }}>
               {ksaWon ? "فاز الأخضر!" : "انتهت"}
+            </span>
+          )}
+          {live && (
+            <span style={{ alignSelf: "flex-start", marginTop: 3, fontSize: 11, fontWeight: 800, padding: "2px 10px",
+              borderRadius: 999, color: C.red, background: "rgba(255,107,107,0.13)",
+              border: "1px solid rgba(255,107,107,0.35)", animation: "pulse 1.6s infinite" }}>
+              ● مباشر الآن
             </span>
           )}
         </div>
