@@ -38,7 +38,14 @@ const ERRORS = {
   PREDICTION_NOT_FOUND: "لا يوجد توقع لهذا العضو على هذه المباراة",
   CHALLENGE_NOT_FOUND: "التحدي غير موجود",
   CANT_DELETE_PUBLIC: "لا يمكن حذف التحدي العام",
+  CANT_MODIFY_PUBLIC: "لا يمكن تعديل التحدي العام",
   CANT_DEMOTE_SELF: "لا يمكنك إزالة صلاحيتك عن نفسك",
+  NOT_OWNER: "هذه العملية لمنشئ التحدي (أو المشرف) فقط",
+  CANT_KICK_OWNER: "لا يمكن طرد منشئ التحدي",
+  ANNOUNCE_INVALID: "نص الإعلان: من حرفين إلى 250 حرفًا",
+  MATCH_EXISTS: "هذه المباراة مضافة مسبقًا",
+  STAGE_INVALID: "اختر مرحلة صحيحة",
+  TEAM_INVALID: "اختر منتخبين صحيحين",
 };
 
 async function rpc(fn, args) {
@@ -81,6 +88,14 @@ export const createChallenge = (name) => rpc("create_challenge", { p_token: tok(
 export const joinChallenge   = (code) => rpc("join_challenge", { p_token: tok(), p_code: code });
 export const leaderboard     = (challengeId) => rpc("leaderboard", { p_token: tok(), p_challenge_id: challengeId });
 export const myRanks         = () => rpc("my_ranks", { p_token: tok() });
+export const dayStars        = (date = null) => rpc("day_stars", { p_token: tok(), p_date: date });
+export const activeAnnouncement = () => rpc("active_announcement", { p_token: tok() });
+
+// ── إدارة التحدي (المالك أو المشرف) ──
+export const challengeSetLock   = (id, locked) => rpc("challenge_set_lock", { p_token: tok(), p_challenge_id: id, p_locked: locked });
+export const challengeRegenCode = (id) => rpc("challenge_regen_code", { p_token: tok(), p_challenge_id: id });
+export const challengeKick      = (id, username) => rpc("challenge_kick", { p_token: tok(), p_challenge_id: id, p_username: username });
+export const challengeMembers   = (id) => rpc("challenge_members", { p_token: tok(), p_challenge_id: id });
 
 // ── الأدمن: المباريات ──
 export const adminSetResult  = (matchId, h, a, qualified = null) =>
@@ -113,3 +128,8 @@ export const adminMatchWinners    = (matchId) => rpc("admin_match_winners", { p_
 export const adminDeleteChallenge = (id) => rpc("admin_delete_challenge", { p_token: tok(), p_challenge_id: id });
 export const adminAuditLog        = (limit = 100) => rpc("admin_audit_log", { p_token: tok(), p_limit: limit });
 export const adminSyncNow         = () => rpc("admin_sync_now", { p_token: tok() });
+export const adminSetAnnouncement   = (body) => rpc("admin_set_announcement", { p_token: tok(), p_body: body });
+export const adminClearAnnouncement = () => rpc("admin_clear_announcement", { p_token: tok() });
+export const adminIntegrityReport   = () => rpc("admin_integrity_report", { p_token: tok() });
+export const adminAddMatch = (teamA, teamB, kickoffISO, stage, city = null) =>
+  rpc("admin_add_match", { p_token: tok(), p_team_a: teamA, p_team_b: teamB, p_kickoff: kickoffISO, p_stage: stage, p_city: city });

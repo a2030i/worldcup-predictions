@@ -20,3 +20,36 @@ export const STAGE_NAMES = {
   qf: "ربع النهائي", sf: "نصف النهائي", tp: "المركز الثالث", f: "النهائي",
 };
 export const stagePoints = (stage) => STAGE_POINTS[stage] ?? 2;
+
+// تنزيل CSV بترميز يفتح سليمًا في Excel بالعربية (BOM + UTF-8)
+export function downloadCSV(filename, headers, rows) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = "﻿" + [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// توقيت مكة لعرض المباريات المضافة ديناميكيًا (الأدوار الإقصائية)
+const KSA_DOW = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const KSA_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+export function ksaParts(iso) {
+  const d = new Date(iso);
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Riyadh", year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true, weekday: "short",
+  }).formatToParts(d).reduce((o, x) => ((o[x.type] = x.value), o), {});
+  const dowIdx = new Date(`${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}T12:00:00Z`).getUTCDay();
+  return {
+    iso: `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`,
+    dow: KSA_DOW[dowIdx],
+    date: `${Number(p.day)} ${KSA_MONTHS[Number(p.month) - 1]}`,
+    t: `${p.hour}:${p.minute}`,
+    p: p.dayPeriod === "pm" ? "م" : "ص",
+  };
+}

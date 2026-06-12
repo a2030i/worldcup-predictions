@@ -977,3 +977,53 @@ grant execute on function
   public.admin_delete_challenge(uuid, uuid),
   public.admin_audit_log(uuid, int)
 to anon, authenticated;
+
+-- ═══════════ المراحل 2+3+4: التشغيل اليومي + النزاهة + الإقصائيات ═══════════
+-- (إلحاق آمن لإعادة التنفيذ — مطابق للمنشور في 2026-06-12)
+
+alter table wc.team_map add column if not exists name_ar text;
+update wc.team_map as t set name_ar = v.n from (values
+  ('MX','المكسيك'),('ZA','جنوب أفريقيا'),('KR','كوريا الجنوبية'),('CZ','التشيك'),
+  ('CA','كندا'),('BA','البوسنة'),('QA','قطر'),('CH','سويسرا'),('US','أمريكا'),
+  ('PY','باراغواي'),('BR','البرازيل'),('MA','المغرب'),('HT','هايتي'),('SCO','إسكتلندا'),
+  ('AU','أستراليا'),('TR','تركيا'),('DE','ألمانيا'),('CW','كوراساو'),('NL','هولندا'),
+  ('JP','اليابان'),('CI','ساحل العاج'),('EC','الإكوادور'),('SE','السويد'),('TN','تونس'),
+  ('ES','إسبانيا'),('CV','الرأس الأخضر'),('BE','بلجيكا'),('EG','مصر'),('SA','السعودية'),
+  ('UY','أوروغواي'),('FR','فرنسا'),('SN','السنغال'),('IQ','العراق'),('NO','النرويج'),
+  ('AR','الأرجنتين'),('DZ','الجزائر'),('AT','النمسا'),('JO','الأردن'),('PT','البرتغال'),
+  ('CD','الكونغو'),('ENG','إنجلترا'),('HR','كرواتيا'),('GH','غانا'),('PA','بنما'),
+  ('UZ','أوزبكستان'),('CO','كولومبيا'),('NZ','نيوزيلندا'),('IR','إيران')
+) as v(c, n) where t.code = v.c;
+
+create table if not exists wc.announcements (
+  id bigint generated always as identity primary key,
+  body text not null check (char_length(trim(body)) between 2 and 250),
+  active boolean not null default true,
+  created_by uuid references wc.profiles(id),
+  created_at timestamptz not null default now()
+);
+alter table wc.announcements enable row level security;
+
+-- ملاحظة: النسخ الكاملة للدوال التالية موجودة في هجرات قاعدة البيانات
+-- (Supabase > Database > Migrations) وهي المصدر التنفيذي المطابق:
+-- active_announcement · admin_set_announcement · admin_clear_announcement
+-- admin_set_result v3 (التصحيح يُنشئ إعلانًا تلقائيًا بأسماء المنتخبات العربية)
+-- wc._challenge_manager · challenge_set_lock · challenge_regen_code
+-- challenge_kick · challenge_members (المالك أو المشرف)
+-- day_stars (نجوم اليوم بتوقيت مكة) · admin_integrity_report
+-- admin_add_match · wc.sync_results v3 (جلب ساعي + بذر تلقائي للإقصائيات
+-- بخريطة مراحل FD: LAST_32→r32 · LAST_16→r16 · QUARTER_FINALS→qf ·
+-- SEMI_FINALS→sf · THIRD_PLACE→tp · FINAL→f) مع عمود sync_config.last_fetch
+
+grant execute on function
+  public.active_announcement(uuid),
+  public.admin_set_announcement(uuid, text),
+  public.admin_clear_announcement(uuid),
+  public.challenge_set_lock(uuid, uuid, boolean),
+  public.challenge_regen_code(uuid, uuid),
+  public.challenge_kick(uuid, uuid, text),
+  public.challenge_members(uuid, uuid),
+  public.day_stars(uuid, date),
+  public.admin_integrity_report(uuid),
+  public.admin_add_match(uuid, text, text, timestamptz, text, text)
+to anon, authenticated;

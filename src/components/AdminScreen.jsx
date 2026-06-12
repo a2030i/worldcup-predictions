@@ -6,9 +6,12 @@ import {
   adminReschedule, adminCancelMatch, adminListUsers, adminUserDetail, adminRename,
   adminSetPhone, adminSetAdmin, adminDeletePrediction, adminListChallenges,
   adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
+  adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
 } from "../lib/api";
-import { digitsOnly, countWord } from "../lib/format";
-import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon } from "../icons.jsx";
+import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints } from "../lib/format";
+import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon } from "../icons.jsx";
+
+const ClockIconSmall = () => <ClockIcon size={14} />;
 
 const field = {
   padding: "10px 12px", borderRadius: 10, fontSize: 14, color: C.text,
@@ -93,6 +96,9 @@ function OverviewTab() {
         </button>
         {syncMsg && <div style={{ color: C.gold, fontSize: 12, marginTop: 8 }}>{syncMsg}</div>}
       </Card>
+      <Card title="إعلان للأعضاء (يظهر أعلى المنصة للجميع)">
+        <AnnounceComposer />
+      </Card>
       {ov.top_challenges?.length > 0 && (
         <Card title="أكبر التحديات الخاصة">
           {ov.top_challenges.map((c) => (
@@ -101,6 +107,79 @@ function OverviewTab() {
               <span style={{ color: C.muted }}>{countWord(Number(c.members), "عضو واحد", "عضوان", "أعضاء")}</span>
             </div>
           ))}
+        </Card>
+      )}
+    </>
+  );
+}
+
+function AnnounceComposer() {
+  const [body, setBody] = useState("");
+  const [msg, setMsg] = useState("");
+  return (
+    <>
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={250} rows={2}
+        placeholder="مثال: جائزة اليوم لأدق متوقع — لا تنسوا مباراة الليلة!"
+        style={{ ...field, width: "100%", resize: "vertical", lineHeight: 1.8 }} />
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <button style={gold} onClick={async () => {
+          try { await adminSetAnnouncement(body); setMsg("نُشر الإعلان ✓"); setBody(""); } catch (e) { setMsg(e.message); }
+        }}>نشر الإعلان</button>
+        <button style={ghost} onClick={async () => {
+          try { await adminClearAnnouncement(); setMsg("أُزيل الإعلان الحالي ✓"); } catch (e) { setMsg(e.message); }
+        }}>إزالة الإعلان الحالي</button>
+      </div>
+      <p style={{ color: C.muted, fontSize: 11, margin: "8px 0 0" }}>
+        تصحيح أي نتيجة معتمدة يُنشئ إعلانًا تلقائيًا للأعضاء بالشفافية الكاملة.
+      </p>
+      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12.5, margin: "6px 0 0", fontWeight: 700 }}>{msg}</p>}
+    </>
+  );
+}
+
+/* ───────────── لوحة اليوم: مباريات اليوم بحالتها + نجوم آخر يوم ───────────── */
+function TodayTab({ matches }) {
+  const [stars, setStars] = useState(null);
+  useEffect(() => { dayStars().then(setStars).catch(() => {}); }, []);
+  const todayIso = ksaParts(new Date().toISOString()).iso;
+  const todays = (matches || []).filter((r) => ksaParts(r.kickoff_at).iso === todayIso);
+  return (
+    <>
+      <Card title={`مباريات اليوم (${todays.length})`}>
+        {todays.length === 0 && <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>لا مباريات اليوم</p>}
+        {todays.map((r) => {
+          const [, a, b] = r.id.split("_");
+          const k = ksaParts(r.kickoff_at);
+          const live = r.status === "scheduled" && r.live_h != null;
+          return (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 0", fontSize: 13, borderBottom: `1px solid ${C.line}`, flexWrap: "wrap" }}>
+              <span className="num" style={{ color: C.gold, fontWeight: 800, width: 64 }}>{k.t} {k.p}</span>
+              <span style={{ flex: 1, minWidth: 120, color: C.text, fontWeight: 700 }}>{NAMES[a]} × {NAMES[b]}</span>
+              {r.status === "finished" && <span className="num" style={{ color: C.green, fontWeight: 800 }}>انتهت {r.result_h}–{r.result_a}</span>}
+              {live && <span className="num" style={{ color: C.red, fontWeight: 800, animation: "pulse 1.6s infinite" }}>مباشر {r.live_h}–{r.live_a}</span>}
+              {r.status === "scheduled" && !live && <span style={{ color: C.muted }}>قادمة</span>}
+              {r.status === "cancelled" && <span style={{ color: C.red }}>ملغاة</span>}
+              <span style={{ color: C.muted, fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <UsersIcon size={12} /> {r.predictors}
+              </span>
+            </div>
+          );
+        })}
+      </Card>
+      {stars?.stars?.length > 0 && (
+        <Card title={`نجوم آخر يوم مكتمل (${stars.date})`}>
+          {stars.stars.map((s, i) => (
+            <div key={`${s.display_name}-${i}`} style={{ display: "flex", gap: 8, padding: "6px 0", fontSize: 13, color: C.text }}>
+              <span className="num" style={{ width: 20, color: C.muted }}>{i + 1}</span>
+              <span style={{ flex: 1, fontWeight: 700 }}>{s.display_name}</span>
+              <span className="num" style={{ color: C.green }}>{s.exact_count} إصابة</span>
+              <span className="num" style={{ color: C.gold, fontWeight: 900 }}>{s.points} نقطة</span>
+            </div>
+          ))}
+          <button style={{ ...ghost, marginTop: 8 }} onClick={() =>
+            downloadCSV(`نجوم-${stars.date}.csv`, ["المركز", "العضو", "الإصابات", "النقاط"],
+              stars.stars.map((s, i) => [i + 1, s.display_name, s.exact_count, s.points]))
+          }>تصدير CSV</button>
         </Card>
       )}
     </>
@@ -211,8 +290,22 @@ function MatchesTab({ matches, onChanged }) {
             {winners.winners.length > 1 && (
               <p style={{ color: C.muted, fontSize: 10.5, margin: "6px 0 0", opacity: 0.8 }}>مرتبون بأسبقية وقت التوقع — الأقدم أولًا</p>
             )}
+            {winners.winners.length > 0 && (
+              <button style={{ ...ghost, marginTop: 8, fontSize: 12 }} onClick={() =>
+                downloadCSV(`فائزون-${winners.match_id}.csv`,
+                  ["المركز", "اسم العرض", "اسم الدخول", "الجوال", "وقت التوقع", "النقاط"],
+                  winners.winners.map((w, i) => [i + 1, w.display_name, w.username, w.phone || "", w.predicted_at, w.points]))
+              }>تصدير الفائزين CSV</button>
+            )}
           </div>
         )}
+      </Card>
+
+      <Card title="إضافة مباراة (الأدوار الإقصائية)">
+        <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.7 }}>
+          المزامنة التلقائية تضيف مباريات الأدوار الإقصائية وحدها فور معرفة المتأهلين — هذا النموذج للاحتياط اليدوي.
+        </p>
+        <AddMatchForm onAdded={(t) => { setMsg(t); onChanged?.(); }} onErr={setMsg} />
       </Card>
 
       <Card title="تأجيل / إلغاء مباراة">
@@ -233,6 +326,39 @@ function MatchesTab({ matches, onChanged }) {
       </Card>
       {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 13, textAlign: "center", fontWeight: 700 }}>{msg}</p>}
     </>
+  );
+}
+
+function AddMatchForm({ onAdded, onErr }) {
+  const [ta, setTa] = useState(""); const [tb, setTb] = useState("");
+  const [kick, setKick] = useState(""); const [stage, setStage] = useState("r32");
+  const [city, setCity] = useState("");
+  const teamSel = { ...field, background: "#171E40", minWidth: 130, flex: 1 };
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <select value={ta} onChange={(e) => setTa(e.target.value)} style={teamSel}>
+        <option value="">المنتخب الأول...</option>
+        {Object.entries(NAMES).map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+      </select>
+      <select value={tb} onChange={(e) => setTb(e.target.value)} style={teamSel}>
+        <option value="">المنتخب الثاني...</option>
+        {Object.entries(NAMES).map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+      </select>
+      <select value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...field, background: "#171E40" }}>
+        {Object.entries(STAGE_NAMES).filter(([s]) => s !== "group").map(([s, n]) => (
+          <option key={s} value={s}>{n} ({stagePoints(s)} نقاط)</option>
+        ))}
+      </select>
+      <input type="datetime-local" value={kick} onChange={(e) => setKick(e.target.value)} style={{ ...field, colorScheme: "dark" }} />
+      <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="المدينة (اختياري)" style={{ ...field, width: 130 }} />
+      <button style={gold} onClick={async () => {
+        if (!ta || !tb || !kick) { onErr("اختر المنتخبين والوقت"); return; }
+        try {
+          await adminAddMatch(ta, tb, `${kick}:00+03:00`, stage, city || null);
+          onAdded("أُضيفت المباراة ✓ — ستظهر للأعضاء فورًا للتوقع");
+        } catch (e) { onErr(e.message); }
+      }}>إضافة</button>
+    </div>
   );
 }
 
@@ -327,6 +453,14 @@ function UsersTab() {
           <input style={{ ...field, flex: 1, minWidth: 0 }} value={q} onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()} placeholder="ابحث بالاسم أو الجوال..." />
           <button style={gold} onClick={load}><SearchIcon size={14} /></button>
+          {users?.length > 0 && (
+            <button style={ghost} onClick={() =>
+              downloadCSV("الأعضاء.csv",
+                ["اسم العرض", "اسم الدخول", "الجوال", "التوقعات", "النقاط", "مشرف", "محظور", "تاريخ التسجيل"],
+                users.map((u) => [u.display_name, u.username, u.phone || "", u.predictions, u.points,
+                  u.is_admin ? "نعم" : "", u.is_banned ? "نعم" : "", u.created_at]))
+            }>CSV</button>
+          )}
         </div>
       </Card>
       {!users && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>}
@@ -384,6 +518,11 @@ function AdminChallengeView({ id, onBack }) {
           <span style={{ width: 36, textAlign: "center" }}>أصاب</span>
           <span style={{ width: 38, textAlign: "center" }}>نقاط</span>
         </div>
+        <button style={{ ...ghost, margin: "10px 0", fontSize: 12 }} onClick={() =>
+          downloadCSV(`لوحة-${data.name}.csv`,
+            ["المركز", "اسم العرض", "اسم الدخول", "الجوال", "إجمالي التوقعات", "الصحيحة", "النقاط"],
+            data.board.map((r, i) => [i + 1, r.display_name, r.username, r.phone || "", r.total_predictions, r.exact_count, r.points]))
+        }>تصدير اللوحة CSV (للجوائز)</button>
         {data.board.map((r, i) => (
           <div key={`${r.username}-${i}`} style={{ display: "flex", alignItems: "center", padding: "8px 0", fontSize: 12.5, borderBottom: i === data.board.length - 1 ? "none" : `1px solid ${C.line}`, background: i === 0 ? C.goldSoft : "transparent", borderRadius: i === 0 ? 6 : 0 }}>
             <span className="num" style={{ width: 24, color: i === 0 ? C.gold : C.muted, fontWeight: i < 3 ? 900 : 600 }}>{i + 1}</span>
@@ -447,6 +586,39 @@ const ACTION_LABELS = {
   make_admin: "ترقية مشرف", remove_admin: "سحب إشراف",
 };
 
+function IntegrityCard() {
+  const [rep, setRep] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const Section = ({ title, items, render }) => (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ color: C.text, fontWeight: 800, fontSize: 12.5 }}>{title}</div>
+      {items.length === 0
+        ? <p style={{ color: C.green, fontSize: 12, margin: "4px 0" }}>لا شيء مريب ✓</p>
+        : items.map((x, i) => <div key={i} style={{ color: C.muted, fontSize: 12, padding: "3px 0" }}>{render(x)}</div>)}
+    </div>
+  );
+  return (
+    <Card title="فحص النزاهة">
+      <button style={ghost} disabled={busy} onClick={async () => {
+        setBusy(true);
+        try { setRep(await adminIntegrityReport()); } catch (e) { setRep({ err: e.message }); }
+        setBusy(false);
+      }}>{busy ? "جاري الفحص..." : "فحص الآن"}</button>
+      {rep?.err && <p style={{ color: C.red, fontSize: 12.5 }}>{rep.err}</p>}
+      {rep && !rep.err && (
+        <>
+          <Section title="حسابات سُجّلت متقاربة زمنيًا (أقل من 5 دقائق)" items={rep.close_registrations}
+            render={(x) => `${x.user1} و ${x.user2} — بفارق ${x.minutes_apart} دقيقة`} />
+          <Section title="توقعات متطابقة منهجيًا (80%+ من 5 مباريات مشتركة فأكثر)" items={rep.identical_predictions}
+            render={(x) => `${x.user1} و ${x.user2} — تطابق ${x.same} من ${x.common}`} />
+          <Section title="معتادو آخر دقيقة قبل القفل (3 مرات فأكثر)" items={rep.last_minute_users}
+            render={(x) => `${x.member} — ${x.times} مرة`} />
+        </>
+      )}
+    </Card>
+  );
+}
+
 function AuditTab() {
   const [log, setLog] = useState(null);
   const [err, setErr] = useState("");
@@ -454,6 +626,8 @@ function AuditTab() {
   if (err) return <p style={{ color: C.red, fontSize: 13, textAlign: "center" }}>{err}</p>;
   if (!log) return <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>;
   return (
+    <>
+    <IntegrityCard />
     <Card title="آخر 100 عملية إدارية">
       {log.length === 0 && <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>لا عمليات بعد</p>}
       {log.map((e) => (
@@ -469,13 +643,15 @@ function AuditTab() {
         </div>
       ))}
     </Card>
+    </>
   );
 }
 
 /* ───────────── الإطار ───────────── */
 export default function AdminScreen({ matches, onChanged }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("today");
   const tabs = [
+    ["today", "اليوم", <ClockIconSmall key="i" />],
     ["overview", "نظرة عامة", <ChartIcon size={14} key="i" />],
     ["matches", "المباريات", <BallIcon size={14} key="i" />],
     ["users", "الأعضاء", <UsersIcon size={14} key="i" />],
@@ -494,6 +670,7 @@ export default function AdminScreen({ matches, onChanged }) {
           }}>{icon}{label}</button>
         ))}
       </div>
+      {tab === "today" && <TodayTab matches={matches} />}
       {tab === "overview" && <OverviewTab />}
       {tab === "matches" && <MatchesTab matches={matches} onChanged={onChanged} />}
       {tab === "users" && <UsersTab />}

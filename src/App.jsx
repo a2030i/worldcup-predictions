@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { C } from "./theme";
-import { getSession, clearSession, getMatches } from "./lib/api";
+import { getSession, clearSession, getMatches, activeAnnouncement } from "./lib/api";
 import { CalendarIcon, ChartIcon, TrophyIcon, ShieldIcon, AlertIcon } from "./icons.jsx";
 import AuthScreen from "./components/AuthScreen.jsx";
 import ScheduleScreen from "./components/ScheduleScreen.jsx";
@@ -23,6 +23,7 @@ export default function App() {
   const [tab, setTab] = useState("schedule");
   const [matches, setMatches] = useState(null); // حالة المباريات من الخادم (توقعي + النتائج)
   const [offline, setOffline] = useState(false);
+  const [announce, setAnnounce] = useState(null); // إعلان الإدارة للأعضاء
   // فارق ساعة الخادم عن الجهاز — يُزامن العدّادات فلا يؤثر تغيير ساعة الجهاز
   const [clockOffset, setClockOffset] = useState(0);
 
@@ -37,7 +38,9 @@ export default function App() {
         if (e.message.includes("الجلسة")) { clearSession(); setSession(null); }
         else setOffline(true); // خطأ شبكة: أبقِ آخر بيانات واعرض تنبيهًا
       });
+    activeAnnouncement().then(setAnnounce).catch(() => {});
   };
+  const dismissedAnnounce = Number(localStorage.getItem("wc26_announce_seen") || 0);
   useEffect(refresh, [session]);
   // تحديث دوري — النتائج واللوحات تتجدد دون إعادة تحميل الصفحة
   // أثناء مباراة حية: كل 20 ثانية ليصل الهدف بأسرع ما يمكن
@@ -84,6 +87,19 @@ export default function App() {
         </div>
       )}
 
+      {announce && announce.id > dismissedAnnounce && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10,
+          background: C.goldSoft, border: "1px solid rgba(246,196,83,0.4)",
+          color: C.gold, fontSize: 13, fontWeight: 700, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+          <span style={{ flex: 1, lineHeight: 1.7 }}>{announce.body}</span>
+          <button onClick={() => { localStorage.setItem("wc26_announce_seen", String(announce.id)); setAnnounce(null); }}
+            aria-label="إغلاق الإعلان"
+            style={{ background: "transparent", border: "none", color: C.gold, cursor: "pointer", fontSize: 16, fontWeight: 900, padding: 4 }}>
+            ✕
+          </button>
+        </div>
+      )}
+
       {tab === "schedule" && <ScheduleScreen matches={matches} onChanged={refresh} clockOffset={clockOffset} />}
       {tab === "standings" && <StandingsScreen matches={matches} />}
       {tab === "challenges" && <ChallengesScreen matches={matches} />}
@@ -123,6 +139,17 @@ function Shell({ children }) {
         @keyframes scoreflash {
           0% { transform: scale(1.6); color: #FFFFFF; text-shadow: 0 0 14px rgba(246,196,83,0.9); }
           100% { transform: scale(1); }
+        }
+        @keyframes scorebounce {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.55); color: #FFFFFF; text-shadow: 0 0 16px rgba(246,196,83,0.95); }
+        }
+        @keyframes goalshout {
+          0% { transform: scale(0.2) rotate(-10deg); opacity: 0; }
+          18% { transform: scale(1.15) rotate(2deg); opacity: 1; }
+          30% { transform: scale(0.98) rotate(0deg); }
+          80% { transform: scale(1.02); opacity: 1; }
+          100% { transform: scale(1.1); opacity: 0; }
         }
         @media (prefers-reduced-motion: reduce) { .block { animation: none } }
       `}</style>

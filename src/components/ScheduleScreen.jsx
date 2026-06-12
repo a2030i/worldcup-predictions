@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction } from "../lib/api";
-import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints } from "../lib/format";
+import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, ksaParts } from "../lib/format";
 import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon } from "../icons.jsx";
 
 const KSA_GREEN = "#2BB45D";
@@ -226,7 +226,7 @@ function Team({ code, goals, lead, flash }) {
       {goals != null && (
         <span key={goals} className="num" style={{ color: lead ? C.gold : C.text, fontWeight: 800, fontSize: 17, minWidth: 22,
           textAlign: "center", display: "inline-block",
-          animation: flash ? "scoreflash 1s ease" : "none" }}>{goals}</span>
+          animation: flash ? "scorebounce 0.9s ease-in-out infinite" : "none" }}>{goals}</span>
       )}
     </div>
   );
@@ -241,17 +241,20 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksaWon = fin && ksa &&
     ((m.a === "SA" && state.result_h > state.result_a) || (m.b === "SA" && state.result_a > state.result_h));
 
-  // كشف الهدف: ارتفاع النتيجة الحية بين تحديثين ← احتفال 12 ثانية
-  const [goal, setGoal] = useState(null); // 'a' | 'b' | 'both'
+  // كشف الهدف: ارتفاع النتيجة الحية بين تحديثين ← احتفال 12 ثانية + قوووول 4 ثوانٍ
+  const [goal, setGoal] = useState(null);   // 'a' | 'b' | 'both'
+  const [shout, setShout] = useState(false); // «قوووول!» عبر الشاشة
   const prevLive = useRef({ h: state?.live_h, a: state?.live_a });
   useEffect(() => {
     const ph = prevLive.current.h, pa = prevLive.current.a;
     const nh = state?.live_h, na = state?.live_a;
     if (nh != null && ph != null && (nh > ph || na > pa)) {
       setGoal(nh > ph && na > pa ? "both" : nh > ph ? "a" : "b");
-      const t = setTimeout(() => setGoal(null), 12_000);
+      setShout(true);
+      const t1 = setTimeout(() => setGoal(null), 12_000);
+      const t2 = setTimeout(() => setShout(false), 4_000);
       prevLive.current = { h: nh, a: na };
-      return () => clearTimeout(t);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
     prevLive.current = { h: nh, a: na };
   }, [state?.live_h, state?.live_a]);
@@ -287,6 +290,23 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
           <Team code={m.a} goals={gA} lead={gA != null && gA > gB} flash={live && (goal === "a" || goal === "both")} />
           <div style={{ height: 1, background: C.line, width: "100%" }} />
           <Team code={m.b} goals={gB} lead={gB != null && gB > gA} flash={live && (goal === "b" || goal === "both")} />
+          {shout && (
+            <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center",
+              justifyContent: "center", pointerEvents: "none", background: "rgba(10,16,51,0.45)" }}>
+              <div style={{ textAlign: "center", animation: "goalshout 4s ease forwards" }}>
+                <div style={{ fontSize: "clamp(52px, 17vw, 110px)", fontWeight: 900, lineHeight: 1,
+                  background: "linear-gradient(135deg,#FFE9A8,#F6C453 45%,#E0962F)",
+                  WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+                  textShadow: "0 0 50px rgba(246,196,83,0.4)", letterSpacing: "-2px" }}>
+                  قوووول!
+                </div>
+                <div style={{ color: "#fff", fontSize: "clamp(16px, 5vw, 26px)", fontWeight: 800, marginTop: 8,
+                  textShadow: "0 2px 16px rgba(0,0,0,0.6)" }}>
+                  {goal === "a" ? NAMES[m.a] : goal === "b" ? NAMES[m.b] : ""} {gA}–{gB}
+                </div>
+              </div>
+            </div>
+          )}
           {fin && (
             <span style={{ alignSelf: "flex-start", marginTop: 3, fontSize: 11, fontWeight: 700, padding: "2px 8px",
               borderRadius: 999, color: ksaWon ? KSA_GREEN : C.green,
@@ -323,12 +343,30 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
   // فهرس حالة الخادم لكل مباراة (توقعي، النتيجة، لحظة القفل...)
   const byId = useMemo(() => Object.fromEntries((matches || []).map((r) => [r.id, r])), [matches]);
 
-  const days = SCHEDULE
+  const staticDays = SCHEDULE.map((d) => ({
+    ...d,
+    matches: d.matches.map((m) => ({ ...m, id: matchId(d.iso, m.a, m.b), kickoff: kickoffISO(d.iso, m.t, m.p) })),
+  }));
+
+  // مباريات الأدوار الإقصائية تُضاف في الخادم تلقائيًا — نبنيها هنا ديناميكيًا
+  const staticIds = useMemo(() => new Set(staticDays.flatMap((d) => d.matches.map((m) => m.id))), []);
+  const dynamicDays = useMemo(() => {
+    const extra = (matches || []).filter((r) => !staticIds.has(r.id) && r.status !== "cancelled");
+    const byDay = {};
+    extra.forEach((r) => {
+      const [, a, b] = r.id.split("_");
+      const k = ksaParts(r.kickoff_at);
+      byDay[k.iso] ||= { iso: k.iso, dow: k.dow, date: k.date, stage: r.stage, matches: [] };
+      byDay[k.iso].matches.push({ id: r.id, a, b, t: k.t, p: k.p, kickoff: r.kickoff_at, stage: r.stage });
+    });
+    Object.values(byDay).forEach((d) => d.matches.sort((x, y) => new Date(x.kickoff) - new Date(y.kickoff)));
+    return Object.values(byDay).sort((x, y) => (x.iso < y.iso ? -1 : 1));
+  }, [matches]);
+
+  const days = [...staticDays, ...dynamicDays]
     .map((d) => ({
       ...d,
-      matches: d.matches
-        .map((m) => ({ ...m, id: matchId(d.iso, m.a, m.b), kickoff: kickoffISO(d.iso, m.t, m.p) }))
-        .filter((m) => !arabOnly || ARAB.includes(m.a) || ARAB.includes(m.b)),
+      matches: d.matches.filter((m) => !arabOnly || ARAB.includes(m.a) || ARAB.includes(m.b)),
     }))
     .filter((d) => d.matches.length > 0);
 
@@ -358,7 +396,8 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
         const isToday = day.iso === today;
         const hasKsa = day.matches.some((m) => m.a === "SA" || m.b === "SA");
         return (
-          <section className="block" key={day.iso} id={`day-${day.iso}`} style={{ scrollMarginTop: 12 }}>
+          <section className="block" key={`${day.iso}${day.stage || ""}`}
+            id={`day-${day.iso}${day.stage ? `-${day.stage}` : ""}`} style={{ scrollMarginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 2px 10px" }}>
               <span style={{
                 background: isToday ? "linear-gradient(135deg,#F6C453,#E0962F)" : hasKsa ? "rgba(43,180,93,0.16)" : "rgba(255,255,255,0.05)",
@@ -366,6 +405,12 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
                 border: isToday ? "none" : `1px solid ${hasKsa ? "rgba(43,180,93,0.4)" : C.line}`,
                 fontWeight: 800, fontSize: 14, padding: "8px 16px", borderRadius: 999,
               }}>{day.dow} · {day.date}</span>
+              {day.stage && day.stage !== "group" && (
+                <span style={{ color: "#B68CFF", fontSize: 11.5, fontWeight: 800, background: "rgba(124,58,237,0.14)",
+                  border: "1px solid rgba(124,58,237,0.4)", padding: "4px 10px", borderRadius: 999 }}>
+                  {STAGE_NAMES[day.stage]} · {STAGE_POINTS[day.stage]} نقاط
+                </span>
+              )}
               {isToday && <span style={{ color: C.gold, fontSize: 12, fontWeight: 800 }}>اليوم</span>}
               <span style={{ flex: 1, height: 1, background: C.line }} />
               <span style={{ color: C.muted, fontSize: 13 }}>

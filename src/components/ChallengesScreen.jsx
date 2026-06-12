@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ALL_MATCHES } from "../data/tournament";
-import { myChallenges, createChallenge, joinChallenge, leaderboard, matchPredictions, myRanks } from "../lib/api";
+import {
+  myChallenges, createChallenge, joinChallenge, leaderboard, matchPredictions, myRanks,
+  challengeSetLock, challengeRegenCode, challengeKick, challengeMembers,
+} from "../lib/api";
 import { countWord } from "../lib/format";
 import { PlusIcon, TicketIcon, UsersIcon, TrophyIcon, BallIcon, CopyIcon, ShareIcon, BackIcon, EyeIcon } from "../icons.jsx";
 
@@ -126,6 +129,68 @@ export default function ChallengesScreen({ matches }) {
   );
 }
 
+/* إدارة المالك: قفل الانضمام · تجديد الكود · طرد عضو */
+function OwnerTools({ ch, code, onCode }) {
+  const [members, setMembers] = useState(null);
+  const [locked, setLocked] = useState(!!ch.join_locked);
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [confirmKick, setConfirmKick] = useState(null);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+
+  const loadMembers = () => challengeMembers(ch.id).then(setMembers).catch((e) => setMsg(e.message));
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: "10px 14px", margin: "4px 0 14px" }}>
+      <button onClick={() => { setOpen(!open); if (!open && !members) loadMembers(); }}
+        style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit",
+          color: C.gold, fontWeight: 800, fontSize: 13, display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+        <span>إدارة التحدي (أنت المنشئ)</span><span style={{ color: C.muted }}>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={btn(false)} onClick={async () => {
+              try { const r = await challengeSetLock(ch.id, !locked); setLocked(r.locked); setMsg(r.locked ? "أُقفل باب الانضمام ✓" : "فُتح باب الانضمام ✓"); }
+              catch (e) { setMsg(e.message); }
+            }}>{locked ? "فتح باب الانضمام" : "قفل باب الانضمام"}</button>
+            <button style={{ ...btn(false), color: confirmRegen ? C.red : undefined }} onClick={async () => {
+              if (!confirmRegen) { setConfirmRegen(true); setTimeout(() => setConfirmRegen(false), 3000); return; }
+              setConfirmRegen(false);
+              try { const r = await challengeRegenCode(ch.id); onCode(r.code); setMsg("جُدّد الكود ✓ — الكود القديم أصبح لاغيًا"); }
+              catch (e) { setMsg(e.message); }
+            }}>{confirmRegen ? "الكود القديم سيبطل — تأكيد؟" : "تجديد الكود"}</button>
+          </div>
+          {members && (
+            <div style={{ marginTop: 10, borderTop: `1px solid ${C.line}`, paddingTop: 6 }}>
+              {members.map((mb) => (
+                <div key={mb.username} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 12.5 }}>
+                  <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {mb.display_name} {mb.is_owner && <span style={{ color: C.gold, fontSize: 10.5 }}>(المنشئ)</span>}
+                  </span>
+                  {!mb.is_owner && (
+                    <button style={{ ...btn(false), padding: "5px 10px", fontSize: 11,
+                      color: confirmKick === mb.username ? "#2A1B00" : C.red,
+                      background: confirmKick === mb.username ? "linear-gradient(135deg,#FF8B8B,#E05555)" : "transparent",
+                      borderColor: "rgba(255,107,107,0.4)" }}
+                      onClick={async () => {
+                        if (confirmKick !== mb.username) { setConfirmKick(mb.username); setTimeout(() => setConfirmKick(null), 3000); return; }
+                        setConfirmKick(null);
+                        try { await challengeKick(ch.id, mb.username); setMsg(`طُرد ${mb.display_name} ✓`); loadMembers(); }
+                        catch (e) { setMsg(e.message); }
+                      }}>{confirmKick === mb.username ? "تأكيد الطرد" : "طرد"}</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12, margin: "8px 0 2px", textAlign: "center", fontWeight: 700 }}>{msg}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* داخل التحدي: لوحة الصدارة + توقعات الأعضاء للمباريات المقفلة */
 function ChallengeView({ ch, matches, onBack }) {
   const [board, setBoard] = useState(null);
@@ -133,6 +198,7 @@ function ChallengeView({ ch, matches, onBack }) {
   const [preds, setPreds] = useState(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
+  const [code, setCode] = useState(ch.code); // قد يتجدد من أدوات المالك
 
   useEffect(() => { leaderboard(ch.id).then(setBoard).catch((e) => setErr(e.message)); }, [ch.id]);
 
@@ -149,11 +215,11 @@ function ChallengeView({ ch, matches, onBack }) {
   };
 
   const copyCode = async () => {
-    try { await navigator.clipboard.writeText(ch.code); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }
     catch { /* المتصفحات القديمة */ }
   };
   const shareWhatsApp = () => {
-    const text = `تعال نافسنا في توقعات المونديال! ادخل «${ch.name}» بالكود ${ch.code}\nhttps://a2030i.github.io/worldcup-predictions/`;
+    const text = `تعال نافسنا في توقعات المونديال! ادخل «${ch.name}» بالكود ${code}\nhttps://a2030i.github.io/worldcup-predictions/`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
@@ -173,10 +239,10 @@ function ChallengeView({ ch, matches, onBack }) {
         <span style={{ color: C.gold }}>{ch.type === "public" ? <BallIcon size={20} /> : <TrophyIcon size={20} />}</span>
         {ch.name}
       </h2>
-      {ch.is_owner && ch.code && (
+      {ch.is_owner && code && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "6px 0 14px" }}>
           <span style={{ color: C.muted, fontSize: 13 }}>
-            كود الانضمام: <b dir="ltr" style={{ color: C.gold, letterSpacing: 3, fontSize: 15 }}>{ch.code}</b>
+            كود الانضمام: <b dir="ltr" style={{ color: C.gold, letterSpacing: 3, fontSize: 15 }}>{code}</b>
           </span>
           <button onClick={copyCode} style={{ ...btn(false), padding: "7px 12px", fontSize: 12 }}>
             <CopyIcon size={13} /> {copied ? "نُسخ ✓" : "نسخ"}
@@ -186,6 +252,7 @@ function ChallengeView({ ch, matches, onBack }) {
           </button>
         </div>
       )}
+      {ch.is_owner && ch.type === "private" && <OwnerTools ch={ch} code={code} onCode={setCode} />}
 
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "8px 14px", marginTop: 8 }}>
         <div style={{ display: "flex", color: C.muted, fontSize: 11, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
