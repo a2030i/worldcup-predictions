@@ -525,7 +525,7 @@ function AdminChallengeView({ id, onBack }) {
         }>تصدير اللوحة CSV (للجوائز)</button>
         {data.board.map((r, i) => (
           <div key={`${r.username}-${i}`} style={{ display: "flex", alignItems: "center", padding: "8px 0", fontSize: 12.5, borderBottom: i === data.board.length - 1 ? "none" : `1px solid ${C.line}`, background: i === 0 ? C.goldSoft : "transparent", borderRadius: i === 0 ? 6 : 0 }}>
-            <span className="num" style={{ width: 24, color: i === 0 ? C.gold : C.muted, fontWeight: i < 3 ? 900 : 600 }}>{i + 1}</span>
+            <span className="num" style={{ width: 24, color: Number(r.rank) === 1 ? C.gold : C.muted, fontWeight: Number(r.rank) <= 3 ? 900 : 600 }}>{r.rank}</span>
             <span style={{ flex: 1, minWidth: 0, color: C.text, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {r.display_name} <span dir="ltr" style={{ color: C.muted, fontWeight: 600, fontSize: 10.5 }}>@{r.username}</span>
             </span>

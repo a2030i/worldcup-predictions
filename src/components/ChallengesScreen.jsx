@@ -223,13 +223,14 @@ function ChallengeView({ ch, matches, onBack }) {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  const rankStyle = (i) => ({
+  // التلوين بالمركز الحقيقي (المتعادلون يتشاركونه) لا بموضع الصف
+  const rankStyle = (rank) => ({
     width: 26, height: 26, borderRadius: 999, display: "inline-flex", alignItems: "center",
     justifyContent: "center", fontSize: 12.5, fontWeight: 900, flexShrink: 0,
-    color: i === 0 ? "#2A1B00" : i === 1 ? "#1A2040" : i === 2 ? "#2A1505" : C.muted,
-    background: i === 0 ? "linear-gradient(135deg,#F6C453,#E0962F)"
-      : i === 1 ? "linear-gradient(135deg,#D7DCEE,#9BA3C4)"
-      : i === 2 ? "linear-gradient(135deg,#E2A06A,#B06A35)" : "rgba(255,255,255,0.05)",
+    color: rank === 1 ? "#2A1B00" : rank === 2 ? "#1A2040" : rank === 3 ? "#2A1505" : C.muted,
+    background: rank === 1 ? "linear-gradient(135deg,#F6C453,#E0962F)"
+      : rank === 2 ? "linear-gradient(135deg,#D7DCEE,#9BA3C4)"
+      : rank === 3 ? "linear-gradient(135deg,#E2A06A,#B06A35)" : "rgba(255,255,255,0.05)",
   });
 
   return (
@@ -269,7 +270,7 @@ function ChallengeView({ ch, matches, onBack }) {
             borderBottom: i === board.length - 1 ? "none" : `1px solid ${C.line}`,
             background: i === 0 ? C.goldSoft : "transparent", borderRadius: i === 0 ? 8 : 0,
           }}>
-            <span style={{ width: 34 }}><span style={rankStyle(i)}>{i + 1}</span></span>
+            <span style={{ width: 34 }}><span style={rankStyle(Number(r.rank))}>{r.rank}</span></span>
             <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.username}</span>
             <span className="num" style={{ width: 52, textAlign: "center", color: C.muted, fontSize: 13 }}>{r.played}</span>
             <span className="num" style={{ width: 50, textAlign: "center", color: C.green, fontSize: 13 }}>{r.exact_count}</span>
