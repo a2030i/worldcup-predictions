@@ -80,6 +80,7 @@ export const myChallenges   = () => rpc("my_challenges", { p_token: tok() });
 export const createChallenge = (name) => rpc("create_challenge", { p_token: tok(), p_name: name });
 export const joinChallenge   = (code) => rpc("join_challenge", { p_token: tok(), p_code: code });
 export const leaderboard     = (challengeId) => rpc("leaderboard", { p_token: tok(), p_challenge_id: challengeId });
+export const myRanks         = () => rpc("my_ranks", { p_token: tok() });
 
 // ── الأدمن: المباريات ──
 export const adminSetResult  = (matchId, h, a, qualified = null) =>

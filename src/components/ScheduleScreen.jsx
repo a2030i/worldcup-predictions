@@ -2,19 +2,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction } from "../lib/api";
-import { digitsOnly, countWord } from "../lib/format";
-import { LockIcon, ClockIcon, UsersIcon, PinIcon } from "../icons.jsx";
+import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints } from "../lib/format";
+import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon } from "../icons.jsx";
 
 const KSA_GREEN = "#2BB45D";
 
-/* عدّاد حي حتى لحظة قفل التوقعات (قبل الانطلاق بـ 5 ثوانٍ)
-   ملاحظة: هذا للعرض فقط — القفل الحقيقي يفرضه الخادم بوقته هو */
-function useCountdown(locksAt) {
-  const [left, setLeft] = useState(() => new Date(locksAt) - Date.now());
+/* عدّاد حي حتى لحظة قفل التوقعات — مُزامَن مع ساعة الخادم عبر clockOffset
+   فتغيير ساعة الجهاز لا يغيّر الوقت المعروض (والقفل الفعلي في الخادم أصلًا) */
+function useCountdown(locksAt, clockOffset = 0) {
+  const calc = () => new Date(locksAt) - (Date.now() + clockOffset);
+  const [left, setLeft] = useState(calc);
   useEffect(() => {
-    const t = setInterval(() => setLeft(new Date(locksAt) - Date.now()), 1000);
+    const t = setInterval(() => setLeft(calc()), 1000);
     return () => clearInterval(t);
-  }, [locksAt]);
+  }, [locksAt, clockOffset]);
   return left;
 }
 
@@ -34,32 +35,101 @@ const numStyle = {
   fontVariantNumeric: "tabular-nums",
 };
 
-// مضاعف المرحلة (مطابق لصيغة الخادم) — كل مباريات المجموعات ×1
-const stageMult = (stage) => (stage === "qf" ? 2 : stage === "sf" || stage === "f" ? 3 : 1);
+const isExact = (st) => st?.my_h != null && st.my_h === st.result_h && st.my_a === st.result_a;
+
+/* ───── شريط الحماس: حققت / فاتك / متبقي حتى النهائي ───── */
+function ProgressStrip({ matches }) {
+  if (!matches?.length) return null;
+  let achieved = 0, lost = 0, remaining = 0;
+  matches.forEach((m) => {
+    if (m.status === "cancelled") return;
+    const pts = stagePoints(m.stage);
+    if (m.status === "finished") { if (isExact(m)) achieved += pts; else lost += pts; }
+    else remaining += pts;
+  });
+  const total = achieved + lost + remaining;
+  if (!total) return null;
+  const pct = (v) => `${(v / total) * 100}%`;
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: "12px 14px", margin: "12px 0 4px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ color: C.text, fontWeight: 800, fontSize: 13 }}>رحلتك نحو النهائي</span>
+        <span className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 15 }}>{achieved} <span style={{ fontSize: 11, fontWeight: 700 }}>نقطة</span></span>
+      </div>
+      <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.05)" }}>
+        {achieved > 0 && <span style={{ width: pct(achieved), background: "linear-gradient(90deg,#F6C453,#E0962F)" }} />}
+        {lost > 0 && <span style={{ width: pct(lost), background: "rgba(255,107,107,0.45)" }} />}
+        {remaining > 0 && <span style={{ width: pct(remaining), background: "rgba(43,180,93,0.4)" }} />}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, fontWeight: 700, flexWrap: "wrap", gap: 6 }}>
+        <span style={{ color: C.gold }}>حققت {achieved}</span>
+        <span style={{ color: "#FF9B9B" }}>فاتك {lost}</span>
+        <span style={{ color: KSA_GREEN }}>متبقٍ {remaining} نقطة متاحة</span>
+      </div>
+      <div style={{ color: C.muted, fontSize: 10.5, marginTop: 6, textAlign: "center", opacity: 0.85 }}>
+        النهائي وحده يساوي 20 نقطة — لا أحد محسوم قبل النهاية
+      </div>
+    </div>
+  );
+}
+
+/* ───── شرح النقاط — واضح لكل الأعضاء ───── */
+function RulesCard() {
+  const [open, setOpen] = useState(false);
+  const order = ["group", "r32", "r16", "qf", "sf", "f"];
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, margin: "8px 0 4px", overflow: "hidden" }}>
+      <button onClick={() => setOpen(!open)} style={{
+        width: "100%", background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: "inherit", color: C.gold, fontWeight: 800, fontSize: 13,
+        padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><TrophyIcon size={15} /> كيف تُحسب النقاط؟</span>
+        <span style={{ color: C.muted }}>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <div style={{ padding: "0 14px 14px", fontSize: 12.5, color: C.text, lineHeight: 2 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(95px, 1fr))", gap: 8, marginBottom: 10 }}>
+            {order.map((s) => (
+              <div key={s} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+                <div className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 17 }}>{STAGE_POINTS[s]}</div>
+                <div style={{ color: C.muted, fontSize: 10.5 }}>{STAGE_NAMES[s]}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.9 }}>
+            • التوقع الصحيح = <b style={{ color: C.text }}>النتيجة بالضبط</b> (توقعت 2–1 وانتهت 2–1) — وتأخذ نقاط مرحلتها كاملة، وأي نتيجة أخرى صفر.<br />
+            • التوقعات <b style={{ color: C.text }}>تُقفل قبل انطلاق المباراة بـ 5 ثوانٍ بتوقيت الخادم</b> — تغيير ساعة جهازك لا يفيد، وبعد القفل لا يمكن التعديل أبدًا.<br />
+            • يمكنك تعديل توقعك بحرية قبل القفل، ويُسجَّل وقت آخر تعديل.<br />
+            • عند تساوي النقاط: <b style={{ color: C.text }}>الأسبق في تسجيل توقعاته الصحيحة يتقدم</b> — حتى لو بفارق ثوانٍ، وأوقات الجميع معروضة بعد القفل للمصداقية.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* خانة التوقع داخل بطاقة المباراة */
-function PredictionBox({ m, state, onChanged }) {
+function PredictionBox({ m, state, onChanged, clockOffset }) {
   const [h, setH] = useState(state?.my_h ?? "");
   const [a, setA] = useState(state?.my_a ?? "");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
   const locksAt = state?.locks_at || new Date(new Date(m.kickoff).getTime() - 5000).toISOString();
-  const left = useCountdown(locksAt);
+  const left = useCountdown(locksAt, clockOffset);
   const finished = state?.status === "finished";
   const locked = finished || left <= 0;
   const saved = state?.my_h != null;
+  const pts = stagePoints(state?.stage || m.stage);
 
   // نتيجة منتهية + كان عندي توقع → اعرض نقاطي عليها
   if (finished) {
     if (!saved) return <Note muted>لم تتوقع هذه المباراة</Note>;
-    const exact = state.my_h === state.result_h && state.my_a === state.result_a;
-    const dir = Math.sign(state.my_h - state.my_a) === Math.sign(state.result_h - state.result_a);
-    const diff = dir && (state.my_h - state.my_a) === (state.result_h - state.result_a);
-    const pts = (exact ? 5 : diff ? 3 : dir ? 1 : 0) * stageMult(m.stage);
+    const exact = isExact(state);
     return (
-      <Note gold={pts > 0}>
-        توقعت {state.my_h}–{state.my_a} · {pts > 0 ? `+${pts} ${pts >= 3 ? "نقاط" : "نقطة"}${exact ? " · نتيجة دقيقة!" : ""}` : "بدون نقاط"}
+      <Note gold={exact}>
+        توقعت {state.my_h}–{state.my_a} · {exact ? `+${pts} ${pts >= 3 ? "نقاط" : "نقطة"} — توقع صحيح!` : "بدون نقاط"}
       </Note>
     );
   }
@@ -86,7 +156,6 @@ function PredictionBox({ m, state, onChanged }) {
   const urgent = left < 60_000;
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(246,196,83,0.05)", border: `1px solid rgba(246,196,83,0.18)` }}>
-      {/* الأسماء مرنة والخانات ثابتة — يتسع لشاشة 360px دون فيضان */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
         <span style={{ flex: 1, minWidth: 0, color: C.muted, fontSize: 12, fontWeight: 700, textAlign: "left",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.a]}</span>
@@ -102,7 +171,7 @@ function PredictionBox({ m, state, onChanged }) {
         width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
         padding: "11px 0", borderRadius: 10, border: "none", color: "#2A1B00",
         background: "linear-gradient(135deg,#F6C453,#E0962F)", opacity: busy ? 0.6 : 1,
-      }}>{busy ? "لحظات..." : saved ? "تعديل التوقع" : "أرسل توقعك"}</button>
+      }}>{busy ? "لحظات..." : saved ? "تعديل التوقع" : `أرسل توقعك (تساوي ${pts} ${pts >= 3 ? "نقاط" : "نقطة"})`}</button>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11.5 }}>
         <span className="num" style={{ color: urgent ? C.red : C.muted, fontWeight: urgent ? 800 : 600,
           animation: urgent ? "pulse 1.2s infinite" : "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -142,7 +211,7 @@ function Team({ code, goals, lead }) {
   );
 }
 
-function MatchRow({ m, state, last, onChanged }) {
+function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksa = m.a === "SA" || m.b === "SA";
   const fin = state?.status === "finished";
   const ksaWon = fin && ksa &&
@@ -188,12 +257,12 @@ function MatchRow({ m, state, last, onChanged }) {
           )}
         </div>
       </div>
-      <PredictionBox m={m} state={state} onChanged={onChanged} />
+      <PredictionBox m={m} state={state} onChanged={onChanged} clockOffset={clockOffset} />
     </div>
   );
 }
 
-export default function ScheduleScreen({ matches, onChanged }) {
+export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) {
   const [arabOnly, setArabOnly] = useState(false);
   const today = todayISO();
   // فهرس حالة الخادم لكل مباراة (توقعي، النتيجة، لحظة القفل...)
@@ -218,7 +287,9 @@ export default function ScheduleScreen({ matches, onChanged }) {
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 4 }}>
+      <ProgressStrip matches={matches} />
+      <RulesCard />
+      <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "10px 0 4px" }}>
         {[["كل المباريات", false], ["المنتخبات العربية", true]].map(([label, v]) => (
           <button key={label} onClick={() => setArabOnly(v)} style={{
             border: `1px solid ${arabOnly === v ? C.gold : C.line}`, cursor: "pointer",
@@ -248,14 +319,15 @@ export default function ScheduleScreen({ matches, onChanged }) {
             </div>
             <div style={{ background: C.card, borderRadius: 18, padding: "4px 14px", border: isToday ? "1px solid rgba(246,196,83,0.4)" : `1px solid ${C.line}` }}>
               {day.matches.map((m, i) => (
-                <MatchRow key={m.id} m={m} state={byId[m.id]} last={i === day.matches.length - 1} onChanged={onChanged} />
+                <MatchRow key={m.id} m={{ ...m, stage: byId[m.id]?.stage || m.stage }} state={byId[m.id]}
+                  last={i === day.matches.length - 1} onChanged={onChanged} clockOffset={clockOffset} />
               ))}
             </div>
           </section>
         );
       })}
       <p style={{ color: C.muted, fontSize: 11.5, textAlign: "center", marginTop: 26, opacity: 0.72, lineHeight: 1.8 }}>
-        المواعيد بتوقيت المملكة (مكة) · التوقعات تُقفل قبل الانطلاق بـ 5 ثوانٍ · النقاط: دقيقة 5 · فارق 3 · اتجاه 1
+        المواعيد بتوقيت المملكة (مكة) · التوقع الصحيح = النتيجة بالضبط · القفل قبل الانطلاق بـ 5 ثوانٍ بتوقيت الخادم
       </p>
     </>
   );

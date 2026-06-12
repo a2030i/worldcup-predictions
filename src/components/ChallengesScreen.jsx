@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ALL_MATCHES } from "../data/tournament";
-import { myChallenges, createChallenge, joinChallenge, leaderboard, matchPredictions } from "../lib/api";
+import { myChallenges, createChallenge, joinChallenge, leaderboard, matchPredictions, myRanks } from "../lib/api";
 import { countWord } from "../lib/format";
 import { PlusIcon, TicketIcon, UsersIcon, TrophyIcon, BallIcon, CopyIcon, ShareIcon, BackIcon, EyeIcon } from "../icons.jsx";
 
@@ -27,13 +27,19 @@ const SectionTitle = ({ icon, children }) => (
 
 export default function ChallengesScreen({ matches }) {
   const [list, setList] = useState(null);
+  const [ranks, setRanks] = useState({});   // ترتيبي في كل تحدٍّ: { challenge_id: {rank, members, points} }
   const [open, setOpen] = useState(null);   // التحدي المفتوح حاليًا
   const [newName, setNewName] = useState("");
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const refresh = () => myChallenges().then(setList).catch((e) => setMsg(e.message));
+  const refresh = () => {
+    myChallenges().then(setList).catch((e) => setMsg(e.message));
+    myRanks()
+      .then((rows) => setRanks(Object.fromEntries(rows.map((r) => [r.challenge_id, r]))))
+      .catch(() => {});
+  };
   useEffect(() => { refresh(); }, []);
 
   const doCreate = async () => {
@@ -100,11 +106,19 @@ export default function ChallengesScreen({ matches }) {
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: "block", color: C.text, fontWeight: 800, fontSize: 15 }}>{ch.name}</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: C.muted, fontSize: 12, marginTop: 2 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: C.muted, fontSize: 12, marginTop: 2, flexWrap: "wrap" }}>
               <UsersIcon size={12} /> {countWord(Number(ch.members), "عضو واحد", "عضوان", "أعضاء")}
               {ch.is_owner && ch.code && <> · الكود: <b dir="ltr" style={{ color: C.gold, letterSpacing: 2 }}>{ch.code}</b></>}
             </span>
           </span>
+          {ranks[ch.id] && (
+            <span style={{ textAlign: "center", flexShrink: 0 }}>
+              <span className="num" style={{ display: "block", color: Number(ranks[ch.id].my_rank) === 1 ? C.gold : C.text, fontWeight: 900, fontSize: 16 }}>
+                {Number(ranks[ch.id].my_rank) === 1 ? "الأول" : `${ranks[ch.id].my_rank} من ${ranks[ch.id].members}`}
+              </span>
+              <span className="num" style={{ display: "block", color: C.muted, fontSize: 10.5 }}>{ranks[ch.id].my_points} نقطة</span>
+            </span>
+          )}
           <span style={{ color: C.gold, fontSize: 18 }}>‹</span>
         </button>
       ))}
@@ -177,7 +191,7 @@ function ChallengeView({ ch, matches, onBack }) {
         <div style={{ display: "flex", color: C.muted, fontSize: 11.5, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
           <span style={{ width: 34 }}>#</span>
           <span style={{ flex: 1 }}>العضو</span>
-          <span style={{ width: 44, textAlign: "center" }}>دقيقة</span>
+          <span style={{ width: 44, textAlign: "center" }}>أصاب</span>
           <span style={{ width: 40, textAlign: "center" }}>لعب</span>
           <span style={{ width: 48, textAlign: "center" }}>نقاط</span>
         </div>
@@ -213,14 +227,22 @@ function ChallengeView({ ch, matches, onBack }) {
           <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: "6px 14px", marginTop: 10 }}>
             {preds.length === 0 && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>لا توقعات لهذه المباراة في هذا التحدي</p>}
             {preds.map((p, i) => (
-              <div key={`${p.username}-${i}`} style={{ display: "flex", padding: "9px 0", fontSize: 13.5, borderBottom: i === preds.length - 1 ? "none" : `1px solid ${C.line}` }}>
+              <div key={`${p.username}-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 0", fontSize: 13.5, borderBottom: i === preds.length - 1 ? "none" : `1px solid ${C.line}` }}>
                 <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.username}</span>
+                <span className="num" dir="ltr" style={{ color: C.muted, fontSize: 10.5, opacity: 0.8 }}>
+                  {new Date(p.predicted_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
                 <span className="num" style={{ color: C.muted }}>{p.h}–{p.a}</span>
-                <span className="num" style={{ width: 56, textAlign: "left", color: p.points > 0 ? C.gold : C.muted, fontWeight: 800 }}>
+                <span className="num" style={{ width: 50, textAlign: "left", color: p.points > 0 ? C.gold : C.muted, fontWeight: 800 }}>
                   {p.points > 0 ? `+${p.points}` : "—"}
                 </span>
               </div>
             ))}
+            {preds.length > 1 && (
+              <p style={{ color: C.muted, fontSize: 10.5, textAlign: "center", margin: "8px 0 4px", opacity: 0.8 }}>
+                وقت كل توقع معروض للمصداقية — عند تساوي النقاط يتقدم الأسبق توقعًا
+              </p>
+            )}
           </div>
         )}
       </div>

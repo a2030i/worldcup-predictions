@@ -23,11 +23,16 @@ export default function App() {
   const [tab, setTab] = useState("schedule");
   const [matches, setMatches] = useState(null); // حالة المباريات من الخادم (توقعي + النتائج)
   const [offline, setOffline] = useState(false);
+  // فارق ساعة الخادم عن الجهاز — يُزامن العدّادات فلا يؤثر تغيير ساعة الجهاز
+  const [clockOffset, setClockOffset] = useState(0);
 
   const refresh = () => {
     if (!session) return;
     getMatches()
-      .then((d) => { setMatches(d); setOffline(false); })
+      .then((d) => {
+        setMatches(d); setOffline(false);
+        if (d?.[0]?.server_now) setClockOffset(new Date(d[0].server_now).getTime() - Date.now());
+      })
       .catch((e) => {
         if (e.message.includes("الجلسة")) { clearSession(); setSession(null); }
         else setOffline(true); // خطأ شبكة: أبقِ آخر بيانات واعرض تنبيهًا
@@ -77,7 +82,7 @@ export default function App() {
         </div>
       )}
 
-      {tab === "schedule" && <ScheduleScreen matches={matches} onChanged={refresh} />}
+      {tab === "schedule" && <ScheduleScreen matches={matches} onChanged={refresh} clockOffset={clockOffset} />}
       {tab === "standings" && <StandingsScreen matches={matches} />}
       {tab === "challenges" && <ChallengesScreen matches={matches} />}
       {tab === "admin" && session.isAdmin && <AdminScreen matches={matches} onChanged={refresh} />}

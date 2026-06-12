@@ -155,22 +155,20 @@ begin
   return u;
 end $$;
 
--- ─────────────────── احتساب النقاط (5 / 3 / 1) ───────────────────
--- نتيجة دقيقة = 5 · اتجاه + فارق صحيح = 3 · اتجاه فقط = 1
--- مضاعف المرحلة: group/r32/r16 ×1 · qf ×2 · sf/f ×3
--- +2 لتوقع المتأهل الصحيح (الإقصائيات، عند تسجيل الأدمن للمتأهل)
+-- ─────────────────── احتساب النقاط (قرار المالك 2026-06-12) ───────────────────
+-- التوقع الصحيح = النتيجة بالضبط، ويأخذ نقاط مرحلته كاملة:
+-- مجموعات 2 · دور32 4 · دور16 6 · ربع 8 · نصف 10 · المركز الثالث 10 · النهائي 20
+-- (عمود qualified خارج الاحتساب حاليًا)
 create or replace function wc.match_points(
   ph int, pa int, pq text, rh int, ra int, rq text, stage text
 ) returns int language sql immutable as $$
-  select case when rh is null or ra is null then 0 else
-    (case
-      when ph = rh and pa = ra then 5
-      when sign(ph - pa) = sign(rh - ra) and (ph - pa) = (rh - ra) then 3
-      when sign(ph - pa) = sign(rh - ra) then 1
-      else 0
-    end)
-    * (case stage when 'qf' then 2 when 'sf' then 3 when 'f' then 3 else 1 end)
-    + (case when stage <> 'group' and pq is not null and pq = rq then 2 else 0 end)
+  select case
+    when rh is null or ra is null then 0
+    when ph = rh and pa = ra then
+      case stage when 'group' then 2 when 'r32' then 4 when 'r16' then 6
+                 when 'qf' then 8 when 'sf' then 10 when 'tp' then 10
+                 when 'f' then 20 else 2 end
+    else 0
   end
 $$;
 
@@ -278,28 +276,32 @@ begin
 end $$;
 
 -- مبارياتي: حالة كل مباراة + نتيجتها + توقعي + عدد المتوقعين
+-- server_now: لمزامنة عدّادات الواجهة بساعة الخادم (تغيير ساعة الجهاز لا يؤثر)
+drop function if exists public.get_matches(uuid);
 create or replace function public.get_matches(p_token uuid)
 returns table (
-  id text, status text, kickoff_at timestamptz, locks_at timestamptz,
+  id text, status text, stage text, kickoff_at timestamptz, locks_at timestamptz,
   result_h int, result_a int, qualified text,
-  my_h int, my_a int, my_qualified text, predictors bigint
+  my_h int, my_a int, my_qualified text, predictors bigint, server_now timestamptz
 ) language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles;
 begin
   u := wc._auth(p_token);
   return query
-  select m.id, m.status, m.kickoff_at, wc.lock_at(m),
+  select m.id, m.status, m.stage, m.kickoff_at, wc.lock_at(m),
          m.result_h, m.result_a, m.qualified,
          p.h, p.a, p.qualified,
-         (select count(*) from wc.predictions x where x.match_id = m.id)
+         (select count(*) from wc.predictions x where x.match_id = m.id),
+         now()
   from wc.matches m
   left join wc.predictions p on p.match_id = m.id and p.user_id = u.id
   order by m.kickoff_at;
 end $$;
 
--- توقعات الأعضاء لمباراة — تنكشف فقط بعد القفل (داخل تحدٍّ مشترك)
+-- توقعات الأعضاء لمباراة — تنكشف فقط بعد القفل + وقت كل توقع (للمصداقية)
+drop function if exists public.match_predictions(uuid, uuid, text);
 create or replace function public.match_predictions(p_token uuid, p_challenge_id uuid, p_match_id text)
-returns table (username text, h int, a int, qualified text, points int)
+returns table (username text, h int, a int, qualified text, points int, predicted_at timestamptz)
 language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles; m wc.matches;
 begin
@@ -314,12 +316,13 @@ begin
   return query
   select pr.display_name,  -- مفتاح JSON يبقى username لتوافق الواجهة
          p.h, p.a, p.qualified,
-         wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)
+         wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage),
+         p.updated_at
   from wc.predictions p
   join wc.memberships mb on mb.user_id = p.user_id and mb.challenge_id = p_challenge_id
   join wc.profiles pr on pr.id = p.user_id
   where p.match_id = p_match_id
-  order by 5 desc, pr.display_name;
+  order by 5 desc, p.updated_at asc, pr.display_name;
 end $$;
 
 -- ───────────────────── التحديات ─────────────────────
@@ -381,6 +384,7 @@ end $$;
 -- ─────────────────── لوحة الصدارة (محسوبة دائمًا) ───────────────────
 -- المنضم متأخرًا تُحسب له فقط المباريات التي انطلقت بعد انضمامه
 -- التجميع بمعرّف العضو (اسم العرض يجوز تكراره) · «لعب» = المباريات المنتهية المحسوبة فقط
+-- كسر التعادل: متوسط أوقات التوقعات الصحيحة — الأسبق أولًا
 create or replace function public.leaderboard(p_token uuid, p_challenge_id uuid)
 returns table (username text, points bigint, exact_count bigint,
                direction_count bigint, played bigint)
@@ -406,7 +410,37 @@ begin
        and m.kickoff_at >= mb.joined_at
   where mb.challenge_id = p_challenge_id
   group by pr.id, pr.display_name
-  order by 2 desc, 3 desc, 4 desc, pr.display_name;
+  order by 2 desc,
+           avg(extract(epoch from p.updated_at)) filter (where p.h = m.result_h and p.a = m.result_a) asc nulls last,
+           pr.display_name;
+end $$;
+
+-- ترتيبي في كل تحدياتي بنظرة واحدة (نفس منطق اللوحة وكسر تعادلها)
+create or replace function public.my_ranks(p_token uuid)
+returns table (challenge_id uuid, my_rank bigint, members bigint, my_points bigint)
+language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles;
+begin
+  u := wc._auth(p_token);
+  return query
+  with scored as (
+    select mb.challenge_id as cid, mb.user_id as uid,
+      coalesce(sum(wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)), 0) as pts,
+      avg(extract(epoch from p.updated_at)) filter (where p.h = m.result_h and p.a = m.result_a) as tb
+    from wc.memberships mb
+    join wc.profiles pr on pr.id = mb.user_id and not pr.is_banned
+    left join wc.predictions p on p.user_id = mb.user_id
+    left join wc.matches m on m.id = p.match_id
+         and m.status = 'finished'
+         and m.kickoff_at >= mb.joined_at
+    group by mb.challenge_id, mb.user_id
+  ), ranked as (
+    select cid, uid, pts,
+      rank() over (partition by cid order by pts desc, tb asc nulls last) as rnk,
+      count(*) over (partition by cid) as total
+    from scored
+  )
+  select r.cid, r.rnk, r.total, r.pts from ranked r where r.uid = u.id;
 end $$;
 
 -- ───────────────────── لوحة الأدمن: المباريات ─────────────────────
@@ -714,6 +748,7 @@ grant execute on function
   public.join_challenge(uuid, text),
   public.my_challenges(uuid),
   public.leaderboard(uuid, uuid),
+  public.my_ranks(uuid),
   public.admin_set_result(uuid, text, int, int, text),
   public.admin_reschedule(uuid, text, timestamptz),
   public.admin_cancel_match(uuid, text),
