@@ -10,6 +10,7 @@
 
 - **الواجهة**: React 18 + Vite، بدون مكتبة UI — التنسيق inline styles بهوية ثابتة (كحلي ليلي + ذهبي، خط Cairo). الألوان في `src/theme.js`.
 - **الخلفية**: Supabase. **لا وصول مباشر للجداول من المتصفح** — RLS مفعّل بلا سياسات، وكل العمليات عبر دوال RPC بـ `security definer` في `supabase/schema.sql`.
+- **عزل السكيما (مهم)**: المشروع يتشارك مشروع Supabase مع تطبيق آخر (labbeh-tokyo). الجداول والدوال المساعدة في سكيما **`wc`** (غير معروضة عبر REST)، ودوال API فقط في `public`. **ممنوع** أي `revoke/grant on all ... in schema public` — يكسر التطبيق المجاور. الصلاحيات تُمنح بالاسم لكل دالة (انظر نهاية schema.sql).
 - **الهوية**: اسم مستخدم + PIN (4–6 أرقام) بدون إيميل/جوال — قرار منتج نهائي، لا تقترح إضافة إيميل. الجلسة توكن UUID في localStorage.
 - **بيانات الجدول**: `src/data/tournament.js` (الأسماء، المجموعات، المواعيد بتوقيت السعودية). بذرة قاعدة البيانات تُولَّد منها: `npm run seed` → `supabase/seed.sql`.
 - معرّف المباراة موحّد بين الواجهة وقاعدة البيانات: `{iso}_{teamA}_{teamB}` مثل `2026-06-11_MX_ZA`.
@@ -66,7 +67,12 @@ npm run seed       # إعادة توليد seed.sql بعد تعديل الجدو
 
 ## ملاحظات تشغيلية
 
+- **النظام لايف**: https://a2030i.github.io/worldcup-predictions/ (GitHub Pages، فرع `gh-pages` من مستودع a2030i/worldcup-predictions).
+- **قاعدة البيانات**: مشروع Supabase `dukqqwsueqcphemhxjfl` (اسمه labbeh-tokyo — مشترك مع تطبيق آخر، انظر "عزل السكيما" أعلاه). السكيما والبذرة منفّذتان (12 يونيو 2026) ونتائج مباراتي 11–12 يونيو مدخلة.
+- **النشر بعد أي تعديل**:
+  `npm run build` ثم ادفع مجلد dist إلى فرع gh-pages:
+  `cd dist && git init -b gh-pages && git add -A && git commit -m deploy && git push -f https://github.com/a2030i/worldcup-predictions.git gh-pages && cd .. && rm -rf dist/.git`
 - أول أدمن يُعيَّن يدويًا في Supabase SQL Editor:
-  `update profiles set is_admin = true where username = 'الاسم';`
+  `update wc.profiles set is_admin = true where username = 'الاسم';`
 - التحدي العام معرّفه ثابت `00000000-0000-0000-0000-000000000001` (تنشئه البذرة، وتعتمد عليه `register_user`). نفّذ seed.sql قبل أول تسجيل.
 - الأوقات في seed.sql بصيغة `+03:00` (توقيت السعودية) وتُخزَّن timestamptz — المقارنات في الخادم صحيحة بغض النظر عن منطقة العضو الزمنية.
