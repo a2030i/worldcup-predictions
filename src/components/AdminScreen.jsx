@@ -5,10 +5,10 @@ import {
   adminSetResult, adminOverview, adminMatchStats, adminResetPin, adminBan,
   adminReschedule, adminCancelMatch, adminListUsers, adminUserDetail, adminRename,
   adminSetPhone, adminSetAdmin, adminDeletePrediction, adminListChallenges,
-  adminDeleteChallenge, adminAuditLog,
+  adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
 } from "../lib/api";
 import { digitsOnly, countWord } from "../lib/format";
-import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon } from "../icons.jsx";
+import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon } from "../icons.jsx";
 
 const field = {
   padding: "10px 12px", borderRadius: 10, fontSize: 14, color: C.text,
@@ -52,7 +52,10 @@ const fmtTime = (ts) => new Date(ts).toLocaleString("ar-SA", {
 function OverviewTab() {
   const [ov, setOv] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => { adminOverview().then(setOv).catch((e) => setErr(e.message)); }, []);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+  const load = () => adminOverview().then(setOv).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
   if (err) return <p style={{ color: C.red, fontSize: 13, textAlign: "center" }}>{err}</p>;
   if (!ov) return <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>;
   const stats = [
@@ -72,6 +75,23 @@ function OverviewTab() {
             </div>
           ))}
         </div>
+      </Card>
+      <Card title="التحديث التلقائي للنتائج">
+        <div style={{ fontSize: 12.5, color: C.text, lineHeight: 2 }}>
+          الحالة: <b style={{ color: ov.sync?.enabled ? C.green : C.red }}>{ov.sync?.enabled ? "مفعّل" : "متوقف"}</b>
+          {ov.sync?.last_run && <> · آخر تشغيل: <span className="num" dir="ltr" style={{ color: C.muted }}>{fmtTime(ov.sync.last_run)}</span></>}
+          <br />
+          <span style={{ color: C.muted }}>{ov.sync?.last_status || "—"}</span>
+        </div>
+        <button style={{ ...ghost, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }} disabled={syncing}
+          onClick={async () => {
+            setSyncing(true); setSyncMsg("");
+            try { setSyncMsg(await adminSyncNow()); load(); } catch (e) { setSyncMsg(e.message); }
+            setSyncing(false);
+          }}>
+          <RefreshIcon size={14} /> {syncing ? "جاري المزامنة..." : "تشغيل المزامنة الآن"}
+        </button>
+        {syncMsg && <div style={{ color: C.gold, fontSize: 12, marginTop: 8 }}>{syncMsg}</div>}
       </Card>
       {ov.top_challenges?.length > 0 && (
         <Card title="أكبر التحديات الخاصة">
@@ -94,6 +114,7 @@ function MatchesTab({ matches, onChanged }) {
   const [qualified, setQualified] = useState("");
   const [newKickoff, setNewKickoff] = useState("");
   const [stats, setStats] = useState(null);
+  const [winners, setWinners] = useState(null);
   const [msg, setMsg] = useState("");
 
   const byId = Object.fromEntries((matches || []).map((r) => [r.id, r]));
@@ -138,6 +159,10 @@ function MatchesTab({ matches, onChanged }) {
             if (!mid) return;
             try { setStats(await adminMatchStats(mid)); } catch (e) { setMsg(e.message); }
           }}>الإحصاءات</button>
+          <button style={ghost} onClick={async () => {
+            if (!mid) return;
+            try { setWinners(await adminMatchWinners(mid)); } catch (e) { setMsg(e.message); }
+          }}>الفائزون</button>
         </div>
         <p style={{ color: C.muted, fontSize: 11.5, margin: "10px 0 0", lineHeight: 1.7 }}>
           تصحيح نتيجة سابقة: اختر المباراة نفسها وأدخل النتيجة الصحيحة — النقاط تُعاد حسابها تلقائيًا في كل التحديات، ويُسجَّل التعديل في سجل العمليات.
@@ -157,6 +182,34 @@ function MatchesTab({ matches, onChanged }) {
               <div style={{ marginTop: 6, color: C.red, display: "flex", alignItems: "center", gap: 6 }}>
                 <AlertIcon size={14} /> توقعات في آخر دقيقة قبل القفل: {stats.last_minute.map((s) => s.username).join("، ")}
               </div>
+            )}
+          </div>
+        )}
+        {winners && (
+          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "10px 12px" }}>
+            <div style={{ color: C.gold, fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
+              الفائزون بالتوقع الصحيح
+              {winners.status === "finished"
+                ? <span className="num" style={{ color: C.muted, fontWeight: 600 }}> — النتيجة {winners.result_h}–{winners.result_a} · أصاب {winners.winners.length} من {winners.total_predictors} متوقعًا</span>
+                : <span style={{ color: C.muted, fontWeight: 600 }}> — تظهر بعد انتهاء المباراة</span>}
+            </div>
+            {winners.status === "finished" && winners.winners.length === 0 &&
+              <p style={{ color: C.muted, fontSize: 12.5, margin: 0 }}>لا أحد أصاب النتيجة بالضبط في هذه المباراة</p>}
+            {winners.winners.map((w, i) => (
+              <div key={`${w.username}-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", fontSize: 12.5, borderBottom: i === winners.winners.length - 1 ? "none" : `1px solid ${C.line}` }}>
+                <span className="num" style={{ width: 20, color: C.muted }}>{i + 1}</span>
+                <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {w.display_name} <span dir="ltr" style={{ color: C.muted, fontWeight: 600, fontSize: 11 }}>@{w.username}</span>
+                </span>
+                <span dir="ltr" className="num" style={{ color: w.phone ? C.muted : C.red, fontSize: 11.5 }}>{w.phone || "بدون جوال"}</span>
+                <span className="num" dir="ltr" style={{ color: C.muted, fontSize: 10.5 }}>
+                  {new Date(w.predicted_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+                <span className="num" style={{ color: C.gold, fontWeight: 800 }}>+{w.points}</span>
+              </div>
+            ))}
+            {winners.winners.length > 1 && (
+              <p style={{ color: C.muted, fontSize: 10.5, margin: "6px 0 0", opacity: 0.8 }}>مرتبون بأسبقية وقت التوقع — الأقدم أولًا</p>
             )}
           </div>
         )}
@@ -306,28 +359,79 @@ function UsersTab() {
 }
 
 /* ───────────── 4) التحديات ───────────── */
+function AdminChallengeView({ id, onBack }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { adminChallengeBoard(id).then(setData).catch((e) => setErr(e.message)); }, [id]);
+  if (err) return <p style={{ color: C.red, fontSize: 13, textAlign: "center" }}>{err}</p>;
+  if (!data) return <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>;
+  return (
+    <>
+      <button onClick={onBack} style={{ ...ghost, display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+        <BackIcon size={14} /> رجوع للتحديات
+      </button>
+      <Card title={data.name}>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, lineHeight: 1.9 }}>
+          {data.type === "private" && <>المنشئ: {data.owner || "—"} · الكود: <b dir="ltr" style={{ color: C.gold }}>{data.code}</b> · </>}
+          {countWord(data.board.length, "عضو واحد", "عضوان", "أعضاء")}
+          {data.join_locked && <span style={{ color: C.red }}> · الانضمام مقفل</span>}
+        </div>
+        <div style={{ display: "flex", color: C.muted, fontSize: 10.5, fontWeight: 700, padding: "6px 0", borderBottom: `1px solid ${C.line}` }}>
+          <span style={{ width: 24 }}>#</span>
+          <span style={{ flex: 1 }}>العضو</span>
+          <span style={{ width: 84, textAlign: "center" }}>الجوال</span>
+          <span style={{ width: 40, textAlign: "center" }}>توقع</span>
+          <span style={{ width: 36, textAlign: "center" }}>أصاب</span>
+          <span style={{ width: 38, textAlign: "center" }}>نقاط</span>
+        </div>
+        {data.board.map((r, i) => (
+          <div key={`${r.username}-${i}`} style={{ display: "flex", alignItems: "center", padding: "8px 0", fontSize: 12.5, borderBottom: i === data.board.length - 1 ? "none" : `1px solid ${C.line}`, background: i === 0 ? C.goldSoft : "transparent", borderRadius: i === 0 ? 6 : 0 }}>
+            <span className="num" style={{ width: 24, color: i === 0 ? C.gold : C.muted, fontWeight: i < 3 ? 900 : 600 }}>{i + 1}</span>
+            <span style={{ flex: 1, minWidth: 0, color: C.text, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {r.display_name} <span dir="ltr" style={{ color: C.muted, fontWeight: 600, fontSize: 10.5 }}>@{r.username}</span>
+            </span>
+            <span dir="ltr" className="num" style={{ width: 84, textAlign: "center", color: r.phone ? C.muted : C.red, fontSize: 10.5 }}>{r.phone || "بدون جوال"}</span>
+            <span className="num" style={{ width: 40, textAlign: "center", color: C.muted }}>{r.total_predictions}</span>
+            <span className="num" style={{ width: 36, textAlign: "center", color: C.green }}>{r.exact_count}</span>
+            <span className="num" style={{ width: 38, textAlign: "center", color: C.gold, fontWeight: 900, fontSize: 14 }}>{r.points}</span>
+          </div>
+        ))}
+      </Card>
+    </>
+  );
+}
+
 function ChallengesTab() {
   const [list, setList] = useState(null);
+  const [openId, setOpenId] = useState(null);
   const [msg, setMsg] = useState("");
   const load = () => adminListChallenges().then(setList).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, []);
 
+  if (openId) return <AdminChallengeView id={openId} onBack={() => setOpenId(null)} />;
+
   return (
     <>
       {!list && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>}
-      {list?.length === 0 && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>لا تحديات خاصة بعد</p>}
       {list?.map((c) => (
-        <div key={c.id} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <div style={{ color: C.text, fontWeight: 800, fontSize: 14.5 }}>{c.name}</div>
+        <div key={c.id} style={{ background: C.card, border: `1px solid ${c.type === "public" ? "rgba(246,196,83,0.35)" : C.line}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 140, cursor: "pointer" }} onClick={() => setOpenId(c.id)}>
+            <div style={{ color: C.text, fontWeight: 800, fontSize: 14.5 }}>
+              {c.name}
+              {c.type === "public" && <span style={{ fontSize: 10.5, color: C.gold, background: C.goldSoft, padding: "2px 8px", borderRadius: 999, fontWeight: 800, marginRight: 6 }}>عام</span>}
+            </div>
             <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-              المنشئ: {c.owner_display || "—"} · {countWord(Number(c.members), "عضو واحد", "عضوان", "أعضاء")}
-              {" · "}الكود: <b dir="ltr" style={{ color: C.gold }}>{c.code}</b>
+              {c.type === "private" && <>المنشئ: {c.owner_display || "—"} · </>}
+              {countWord(Number(c.members), "عضو واحد", "عضوان", "أعضاء")}
+              {c.code && <> · الكود: <b dir="ltr" style={{ color: C.gold }}>{c.code}</b></>}
             </div>
           </div>
-          <ConfirmButton label="حذف التحدي" onConfirm={async () => {
-            try { await adminDeleteChallenge(c.id); setMsg("حُذف التحدي ✓"); load(); } catch (e) { setMsg(e.message); }
-          }} />
+          <button style={ghost} onClick={() => setOpenId(c.id)}>اللوحة والأعضاء</button>
+          {c.type === "private" && (
+            <ConfirmButton label="حذف" onConfirm={async () => {
+              try { await adminDeleteChallenge(c.id); setMsg("حُذف التحدي ✓"); load(); } catch (e) { setMsg(e.message); }
+            }} />
+          )}
         </div>
       ))}
       {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 13, textAlign: "center", fontWeight: 700 }}>{msg}</p>}

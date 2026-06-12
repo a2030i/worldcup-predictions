@@ -108,5 +108,8 @@ export const adminDeletePrediction = (username, matchId) =>
 
 // ── الأدمن: التحديات والسجل ──
 export const adminListChallenges  = () => rpc("admin_list_challenges", { p_token: tok() });
+export const adminChallengeBoard  = (id) => rpc("admin_challenge_board", { p_token: tok(), p_challenge_id: id });
+export const adminMatchWinners    = (matchId) => rpc("admin_match_winners", { p_token: tok(), p_match_id: matchId });
 export const adminDeleteChallenge = (id) => rpc("admin_delete_challenge", { p_token: tok(), p_challenge_id: id });
 export const adminAuditLog        = (limit = 100) => rpc("admin_audit_log", { p_token: tok(), p_limit: limit });
+export const adminSyncNow         = () => rpc("admin_sync_now", { p_token: tok() });

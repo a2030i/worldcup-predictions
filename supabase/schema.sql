@@ -696,9 +696,11 @@ end $$;
 
 -- ───────────────────── لوحة الأدمن: التحديات والسجل ─────────────────────
 
+-- تشمل التحدي العام (أولًا) ليدخله الأدمن كأي تحدٍّ
+drop function if exists public.admin_list_challenges(uuid);
 create or replace function public.admin_list_challenges(p_token uuid)
 returns table (id uuid, name text, code text, owner_display text, owner_username text,
-               members bigint, join_locked boolean, created_at timestamptz)
+               members bigint, join_locked boolean, created_at timestamptz, type text)
 language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles;
 begin
@@ -706,11 +708,75 @@ begin
   return query
   select c.id, c.name, c.code, pr.display_name, pr.username,
     (select count(*) from wc.memberships mb where mb.challenge_id = c.id),
-    c.join_locked, c.created_at
+    c.join_locked, c.created_at, c.type
   from wc.challenges c
   left join wc.profiles pr on pr.id = c.owner_id
-  where c.type = 'private'
-  order by 6 desc;
+  order by (c.type = 'public') desc, 6 desc;
+end $$;
+
+-- لوحة أي تحدٍّ بعين الأدمن (بلا شرط عضوية) + الجوالات لتوزيع الجوائز
+create or replace function public.admin_challenge_board(p_token uuid, p_challenge_id uuid)
+returns json language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles; c wc.challenges;
+begin
+  u := wc._auth_admin(p_token);
+  select * into c from wc.challenges where id = p_challenge_id;
+  if c.id is null then raise exception 'CHALLENGE_NOT_FOUND'; end if;
+  return json_build_object(
+    'name', c.name, 'type', c.type, 'code', c.code, 'join_locked', c.join_locked,
+    'owner', (select pr.display_name || ' (' || pr.username || ')' from wc.profiles pr where pr.id = c.owner_id),
+    'created_at', c.created_at,
+    'board', (select coalesce(json_agg(x), '[]') from (
+      select pr.display_name, pr.username, pr.phone, mb.joined_at,
+        coalesce(sum(wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)), 0) as points,
+        count(*) filter (where p.h = m.result_h and p.a = m.result_a) as exact_count,
+        (select count(*) from wc.predictions pp where pp.user_id = pr.id) as total_predictions
+      from wc.memberships mb
+      join wc.profiles pr on pr.id = mb.user_id and not pr.is_banned
+      left join wc.predictions p on p.user_id = mb.user_id
+      left join wc.matches m on m.id = p.match_id
+           and m.status = 'finished'
+           and m.kickoff_at >= mb.joined_at
+      where mb.challenge_id = c.id
+      group by pr.id, pr.display_name, pr.username, pr.phone, mb.joined_at
+      order by points desc,
+        avg(extract(epoch from p.updated_at)) filter (where p.h = m.result_h and p.a = m.result_a) asc nulls last,
+        pr.display_name) x)
+  );
+end $$;
+
+-- الفائزون في مباراة (النتيجة بالضبط) بترتيب أسبقية التوقع + الجوالات
+create or replace function public.admin_match_winners(p_token uuid, p_match_id text)
+returns json language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles; m wc.matches;
+begin
+  u := wc._auth_admin(p_token);
+  select * into m from wc.matches where id = p_match_id;
+  if m.id is null then raise exception 'MATCH_NOT_FOUND'; end if;
+  return json_build_object(
+    'match_id', m.id, 'status', m.status,
+    'result_h', m.result_h, 'result_a', m.result_a, 'stage', m.stage,
+    'total_predictors', (select count(*) from wc.predictions p where p.match_id = m.id),
+    'winners', case when m.status <> 'finished' then '[]'::json else
+      (select coalesce(json_agg(x), '[]') from (
+        select pr.display_name, pr.username, pr.phone, p.updated_at as predicted_at,
+               wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage) as points
+        from wc.predictions p
+        join wc.profiles pr on pr.id = p.user_id and not pr.is_banned
+        where p.match_id = m.id
+          and p.h = m.result_h and p.a = m.result_a
+        order by p.updated_at asc) x)
+    end
+  );
+end $$;
+
+-- تشغيل المزامنة يدويًا (زر في نظرة الأدمن العامة)
+create or replace function public.admin_sync_now(p_token uuid)
+returns text language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles;
+begin
+  u := wc._auth_admin(p_token);
+  return wc.sync_results(true);
 end $$;
 
 -- حذف تحدٍّ مخالف (التحدي العام محمي)
@@ -905,6 +971,9 @@ grant execute on function
   public.admin_set_admin(uuid, text, boolean),
   public.admin_delete_prediction(uuid, text, text),
   public.admin_list_challenges(uuid),
+  public.admin_challenge_board(uuid, uuid),
+  public.admin_match_winners(uuid, text),
+  public.admin_sync_now(uuid),
   public.admin_delete_challenge(uuid, uuid),
   public.admin_audit_log(uuid, int)
 to anon, authenticated;
