@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
-import { submitPrediction } from "../lib/api";
+import { submitPrediction, getSession } from "../lib/api";
 import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, ksaParts } from "../lib/format";
-import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon } from "../icons.jsx";
+import { generateShareCard, shareBlob } from "../lib/shareCard";
+import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon, ShareIcon } from "../icons.jsx";
 
 const KSA_GREEN = "#1B9E4B";
 
@@ -109,6 +110,71 @@ function RulesCard() {
   );
 }
 
+/* مشاركة التوقع: اختيار الشكل ← معاينة ← مشاركة/تنزيل */
+function SharePanel({ m, state, pts, onClose }) {
+  const [fmt, setFmt] = useState(null);       // square | story
+  const [preview, setPreview] = useState(null); // { url, blob }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const make = async (f) => {
+    setFmt(f); setBusy(true); setErr("");
+    try {
+      const blob = await generateShareCard({
+        format: f,
+        teamA: NAMES[m.a] || m.a, teamB: NAMES[m.b] || m.b,
+        h: state.my_h, a: state.my_a,
+        displayName: getSession()?.displayName || getSession()?.username || "",
+        kickoff: state?.kickoff_at || m.kickoff,
+        points: countWord(pts, "نقطة واحدة", "نقطتين", "نقاط"),
+      });
+      setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return { url: URL.createObjectURL(blob), blob }; });
+    } catch (e) { setErr("تعذر إنشاء البطاقة"); }
+    setBusy(false);
+  };
+
+  const fmtBtn = (f, label) => (
+    <button onClick={() => make(f)} style={{
+      cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12.5,
+      padding: "8px 14px", borderRadius: 10,
+      border: `1px solid ${fmt === f ? "#2B6BE4" : C.line}`,
+      background: fmt === f ? "#2B6BE4" : C.card, color: fmt === f ? "#FFFFFF" : C.muted,
+    }}>{label}</button>
+  );
+
+  return (
+    <div style={{ marginTop: 10, padding: "12px", borderRadius: 12, background: C.card, border: `1px solid ${C.line}`, textAlign: "center" }}>
+      <div style={{ color: C.text, fontWeight: 800, fontSize: 13, marginBottom: 8 }}>اختر شكل البطاقة</div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        {fmtBtn("square", "مربع (بوست)")}
+        {fmtBtn("story", "طولي (ستوري)")}
+      </div>
+      {busy && <p style={{ color: C.muted, fontSize: 12, margin: "10px 0 0" }}>جاري تجهيز البطاقة...</p>}
+      {err && <p style={{ color: C.red, fontSize: 12, margin: "10px 0 0" }}>{err}</p>}
+      {preview && !busy && (
+        <>
+          <img src={preview.url} alt="بطاقة توقعي" style={{
+            width: fmt === "story" ? 150 : 210, borderRadius: 12, marginTop: 12,
+            border: `1px solid ${C.line}`, display: "inline-block" }} />
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
+            <button onClick={() => shareBlob(preview.blob)} style={{
+              cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+              padding: "10px 18px", borderRadius: 10, border: "none",
+              color: "#FFFFFF", background: "#E0432F",
+              display: "inline-flex", alignItems: "center", gap: 6,
+            }}><ShareIcon size={14} /> مشاركة / حفظ</button>
+            <button onClick={onClose} style={{
+              cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+              padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.line}`,
+              color: C.muted, background: "transparent",
+            }}>إغلاق</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* خانة التوقع داخل بطاقة المباراة */
 function PredictionBox({ m, state, onChanged, clockOffset }) {
   const [h, setH] = useState(state?.my_h ?? "");
@@ -116,6 +182,12 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false); // التوقع المحفوظ لا يُعدَّل إلا بزر «تعديل»
+  const [sharing, setSharing] = useState(false); // لوحة مشاركة التوقع
+
+  // توقع الخادم قد يصل بعد أول عرض (جلسة عائدة) — زامن الخانات ما لم يكن العضو يحرر
+  useEffect(() => {
+    if (!editing) { setH(state?.my_h ?? ""); setA(state?.my_a ?? ""); }
+  }, [state?.my_h, state?.my_a]);
 
   const locksAt = state?.locks_at || new Date(new Date(m.kickoff).getTime() - 5000).toISOString();
   const left = useCountdown(locksAt, clockOffset);
@@ -177,11 +249,18 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.b]}</span>
       </div>
       {readOnly ? (
-        <button onClick={() => { setEditing(true); setMsg(""); }} style={{
-          width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-          padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
-          border: "1px solid rgba(184,119,26,0.45)",
-        }}>تعديل التوقع</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={() => { setEditing(true); setMsg(""); setSharing(false); }} style={{
+            flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+            padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
+            border: "1px solid rgba(184,119,26,0.45)",
+          }}>تعديل التوقع</button>
+          <button onClick={() => setSharing(!sharing)} style={{
+            flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+            padding: "11px 0", borderRadius: 10, color: "#FFFFFF", background: "#2B6BE4",
+            border: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}><ShareIcon size={15} /> شارك توقعك</button>
+        </div>
       ) : (
         <button onClick={save} disabled={busy} style={{
           width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
@@ -189,6 +268,7 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
           background: "#E0432F", opacity: busy ? 0.6 : 1,
         }}>{busy ? "لحظات..." : saved ? "حفظ التعديل" : "أرسل توقعك"}</button>
       )}
+      {sharing && readOnly && <SharePanel m={m} state={state} pts={pts} onClose={() => setSharing(false)} />}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11.5 }}>
         <span className="num" style={{ color: urgent ? C.red : C.muted, fontWeight: urgent ? 800 : 600,
           animation: urgent ? "pulse 1.2s infinite" : "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
