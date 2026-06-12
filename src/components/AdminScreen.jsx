@@ -15,15 +15,15 @@ const ClockIconSmall = () => <ClockIcon size={14} />;
 
 const field = {
   padding: "10px 12px", borderRadius: 10, fontSize: 14, color: C.text,
-  background: "rgba(255,255,255,0.06)", border: `1px solid ${C.line}`, outline: "none", fontFamily: "inherit",
+  background: "#FFFFFF", border: `1px solid ${C.line}`, outline: "none", fontFamily: "inherit",
 };
 const gold = {
   cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
-  padding: "10px 14px", borderRadius: 10, border: "none", color: "#2A1B00",
-  background: "linear-gradient(135deg,#F6C453,#E0962F)",
+  padding: "10px 14px", borderRadius: 10, border: "none", color: "#FFFFFF",
+  background: "#E0432F",
 };
 const ghost = { ...gold, background: "transparent", color: C.muted, border: `1px solid ${C.line}` };
-const danger = { ...gold, background: "rgba(255,107,107,0.14)", color: C.red, border: "1px solid rgba(255,107,107,0.4)" };
+const danger = { ...gold, background: "rgba(214,64,44,0.08)", color: C.red, border: "1px solid rgba(214,64,44,0.35)" };
 
 const Card = ({ title, children }) => (
   <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 16 }}>
@@ -72,7 +72,7 @@ function OverviewTab() {
       <Card>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 10, textAlign: "center" }}>
           {stats.map(([l, v]) => (
-            <div key={l} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "12px 4px" }}>
+            <div key={l} style={{ background: "#F3EFE4", borderRadius: 12, padding: "12px 4px" }}>
               <div className="num" style={{ color: l === "بدون جوال" && v > 0 ? C.red : C.gold, fontWeight: 900, fontSize: 20 }}>{v}</div>
               <div style={{ color: C.muted, fontSize: 11 }}>{l}</div>
             </div>
@@ -208,7 +208,7 @@ function MatchesTab({ matches, onChanged }) {
     <>
       <Card title="اعتماد / تصحيح نتيجة">
         <select value={mid} onChange={(e) => { setMid(e.target.value); setStats(null); setMsg(""); }}
-          style={{ ...field, width: "100%", background: "#171E40" }}>
+          style={{ ...field, width: "100%", background: "#FFFFFF" }}>
           <option value="">اختر المباراة...</option>
           {ALL_MATCHES.map((m) => {
             const s = byId[m.id];
@@ -223,7 +223,7 @@ function MatchesTab({ matches, onChanged }) {
           <input style={{ ...field, width: 64, textAlign: "center" }} inputMode="numeric" maxLength={2}
             value={a} onChange={(e) => setA(digitsOnly(e.target.value))} placeholder={sel ? NAMES[sel.b] : "الثاني"} />
           {isKnockout && (
-            <select value={qualified} onChange={(e) => setQualified(e.target.value)} style={{ ...field, background: "#171E40" }}>
+            <select value={qualified} onChange={(e) => setQualified(e.target.value)} style={{ ...field, background: "#FFFFFF" }}>
               <option value="">المتأهل (للإقصائيات)...</option>
               <option value={sel.a}>{NAMES[sel.a]}</option>
               <option value={sel.b}>{NAMES[sel.b]}</option>
@@ -265,7 +265,7 @@ function MatchesTab({ matches, onChanged }) {
           </div>
         )}
         {winners && (
-          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "10px 12px" }}>
+          <div style={{ marginTop: 12, background: "#F8F5EC", borderRadius: 12, padding: "10px 12px" }}>
             <div style={{ color: C.gold, fontWeight: 800, fontSize: 13, marginBottom: 6 }}>
               الفائزون بالتوقع الصحيح
               {winners.status === "finished"
@@ -311,7 +311,7 @@ function MatchesTab({ matches, onChanged }) {
       <Card title="تأجيل / إلغاء مباراة">
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input type="datetime-local" value={newKickoff} onChange={(e) => setNewKickoff(e.target.value)}
-            style={{ ...field, colorScheme: "dark" }} />
+            style={{ ...field, colorScheme: "light" }} />
           <button style={ghost} onClick={() => {
             if (!mid || !newKickoff) { setMsg("اختر المباراة والوقت الجديد (بتوقيت السعودية)"); return; }
             run(() => adminReschedule(mid, `${newKickoff}:00+03:00`),
@@ -333,7 +333,7 @@ function AddMatchForm({ onAdded, onErr }) {
   const [ta, setTa] = useState(""); const [tb, setTb] = useState("");
   const [kick, setKick] = useState(""); const [stage, setStage] = useState("r32");
   const [city, setCity] = useState("");
-  const teamSel = { ...field, background: "#171E40", minWidth: 130, flex: 1 };
+  const teamSel = { ...field, background: "#FFFFFF", minWidth: 130, flex: 1 };
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <select value={ta} onChange={(e) => setTa(e.target.value)} style={teamSel}>
@@ -344,12 +344,12 @@ function AddMatchForm({ onAdded, onErr }) {
         <option value="">المنتخب الثاني...</option>
         {Object.entries(NAMES).map(([c, n]) => <option key={c} value={c}>{n}</option>)}
       </select>
-      <select value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...field, background: "#171E40" }}>
+      <select value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...field, background: "#FFFFFF" }}>
         {Object.entries(STAGE_NAMES).filter(([s]) => s !== "group").map(([s, n]) => (
           <option key={s} value={s}>{n} ({stagePoints(s)} نقاط)</option>
         ))}
       </select>
-      <input type="datetime-local" value={kick} onChange={(e) => setKick(e.target.value)} style={{ ...field, colorScheme: "dark" }} />
+      <input type="datetime-local" value={kick} onChange={(e) => setKick(e.target.value)} style={{ ...field, colorScheme: "light" }} />
       <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="المدينة (اختياري)" style={{ ...field, width: 130 }} />
       <button style={gold} onClick={async () => {
         if (!ta || !tb || !kick) { onErr("اختر المنتخبين والوقت"); return; }
@@ -374,7 +374,7 @@ function UserActions({ u, onDone, setMsg }) {
   };
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: 12, marginTop: 10 }}>
+    <div style={{ background: "#F8F5EC", borderRadius: 12, padding: 12, marginTop: 10 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <input style={{ ...field, flex: 1, minWidth: 110 }} value={newDisplay} maxLength={20}
           onChange={(e) => setNewDisplay(e.target.value)} placeholder="اسم عرض جديد" />
@@ -553,7 +553,7 @@ function ChallengesTab() {
     <>
       {!list && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>}
       {list?.map((c) => (
-        <div key={c.id} style={{ background: C.card, border: `1px solid ${c.type === "public" ? "rgba(246,196,83,0.35)" : C.line}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div key={c.id} style={{ background: C.card, border: `1px solid ${c.type === "public" ? "rgba(184,119,26,0.35)" : C.line}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ flex: 1, minWidth: 140, cursor: "pointer" }} onClick={() => setOpenId(c.id)}>
             <div style={{ color: C.text, fontWeight: 800, fontSize: 14.5 }}>
               {c.name}

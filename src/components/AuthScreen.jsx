@@ -6,7 +6,7 @@ import { BallIcon, EyeIcon, EyeOffIcon } from "../icons.jsx";
 
 const field = {
   width: "100%", padding: "13px 14px", borderRadius: 12, fontSize: 15,
-  color: C.text, background: "rgba(255,255,255,0.06)",
+  color: C.text, background: "#FFFFFF",
   border: `1px solid ${C.line}`, outline: "none",
 };
 
@@ -112,7 +112,7 @@ export default function AuthScreen({ onAuth }) {
         <button onClick={go} disabled={busy} style={{
           width: "100%", marginTop: 18, cursor: "pointer", fontFamily: "inherit",
           fontWeight: 900, fontSize: 16, padding: "13px 0", borderRadius: 14, border: "none",
-          color: "#2A1B00", background: "linear-gradient(135deg,#F6C453,#E0962F)",
+          color: "#FFFFFF", background: "#E0432F",
           opacity: busy ? 0.6 : 1,
         }}>{busy ? "لحظات..." : registering ? "انضم للتحدي" : "دخول"}</button>
       </div>

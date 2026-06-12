@@ -12,9 +12,9 @@ function DayStars() {
   if (!data?.stars?.length) return null;
   const d = new Date(`${data.date}T12:00:00+03:00`);
   const label = d.toLocaleDateString("ar-SA", { weekday: "long", day: "numeric", month: "long" });
-  const medals = ["linear-gradient(135deg,#F6C453,#E0962F)", "linear-gradient(135deg,#D7DCEE,#9BA3C4)", "linear-gradient(135deg,#E2A06A,#B06A35)"];
+  const medals = ["#EF9F27", "#C9CCDA", "#D8915A"];
   return (
-    <div className="block" style={{ background: C.card, border: "1px solid rgba(246,196,83,0.35)", borderRadius: 16, padding: "12px 14px", marginBottom: 16 }}>
+    <div className="block" style={{ background: C.card, border: "1px solid rgba(184,119,26,0.35)", borderRadius: 16, padding: "12px 14px", marginBottom: 16 }}>
       <div style={{ color: C.gold, fontWeight: 800, fontSize: 13.5, display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
         <TrophyIcon size={15} /> نجوم يوم {label}
       </div>
@@ -79,7 +79,7 @@ export default function StandingsScreen({ matches }) {
               <span style={{
                 background: hasKsa ? "rgba(43,180,93,0.16)" : C.goldSoft,
                 color: hasKsa ? "#2BB45D" : C.gold,
-                border: `1px solid ${hasKsa ? "rgba(43,180,93,0.4)" : "rgba(246,196,83,0.35)"}`,
+                border: `1px solid ${hasKsa ? "rgba(43,180,93,0.4)" : "rgba(184,119,26,0.35)"}`,
                 fontWeight: 800, fontSize: 14, padding: "8px 16px", borderRadius: 999,
               }}>المجموعة {letter}</span>
               <span style={{ flex: 1, height: 1, background: C.line }} />
@@ -96,7 +96,7 @@ export default function StandingsScreen({ matches }) {
                   <div key={code} style={{
                     display: "flex", alignItems: "center", gap: 8, padding: "9px 2px",
                     borderBottom: i === 3 ? "none" : `1px solid ${C.line}`,
-                    background: top ? "rgba(139,228,155,0.06)" : "transparent",
+                    background: top ? "rgba(22,143,91,0.06)" : "transparent",
                     borderRight: top ? `2px solid ${C.green}` : "2px solid transparent", borderRadius: top ? 6 : 0,
                   }}>
                     <span className="num" style={{ width: 18, flex: "0 0 auto", textAlign: "center", color: C.muted, fontSize: 12.5 }}>{i + 1}</span>
@@ -109,7 +109,7 @@ export default function StandingsScreen({ matches }) {
                     <Cell w={COLW.rec} style={{ color: C.text, fontSize: 13 }}>
                       <span dir="ltr">{s.l}-{s.d}-{s.w}</span>
                     </Cell>
-                    <Cell w={COLW.gd} style={{ color: gd > 0 ? C.green : gd < 0 ? "#FF8585" : C.muted, fontSize: 13 }}>
+                    <Cell w={COLW.gd} style={{ color: gd > 0 ? C.green : gd < 0 ? "#C24736" : C.muted, fontSize: 13 }}>
                       <span dir="ltr">{gd > 0 ? `+${gd}` : gd}</span>
                     </Cell>
                     <Cell w={COLW.pts} style={{ color: C.gold, fontWeight: 800, fontSize: 15 }}>{s.pts}</Cell>

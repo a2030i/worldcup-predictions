@@ -12,14 +12,14 @@ const btn = (primary) => ({
   cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13.5,
   padding: "11px 16px", borderRadius: 12,
   border: primary ? "none" : `1px solid ${C.line}`,
-  color: primary ? "#2A1B00" : C.muted,
-  background: primary ? "linear-gradient(135deg,#F6C453,#E0962F)" : "transparent",
+  color: primary ? "#FFFFFF" : C.muted,
+  background: primary ? "#E0432F" : "transparent",
   display: "inline-flex", alignItems: "center", gap: 6,
 });
 
 const field = {
   flex: 1, minWidth: 0, padding: "11px 12px", borderRadius: 12, fontSize: 14, color: C.text,
-  background: "rgba(255,255,255,0.06)", border: `1px solid ${C.line}`, outline: "none",
+  background: "#FFFFFF", border: `1px solid ${C.line}`, outline: "none",
 };
 
 const SectionTitle = ({ icon, children }) => (
@@ -95,14 +95,14 @@ export default function ChallengesScreen({ matches }) {
       {list?.map((ch) => (
         <button key={ch.id} onClick={() => setOpen(ch)} style={{
           width: "100%", textAlign: "right", cursor: "pointer", fontFamily: "inherit",
-          background: C.card, border: `1px solid ${ch.type === "public" ? "rgba(246,196,83,0.35)" : C.line}`,
+          background: C.card, border: `1px solid ${ch.type === "public" ? "rgba(184,119,26,0.35)" : C.line}`,
           borderRadius: 16, padding: "14px 16px", marginBottom: 10,
           display: "flex", alignItems: "center", gap: 12,
         }}>
           <span style={{
             width: 42, height: 42, borderRadius: 12, display: "inline-flex", alignItems: "center",
             justifyContent: "center", flexShrink: 0,
-            background: ch.type === "public" ? C.goldSoft : "rgba(255,255,255,0.06)",
+            background: ch.type === "public" ? C.goldSoft : "#FFFFFF",
             color: ch.type === "public" ? C.gold : C.muted,
           }}>
             {ch.type === "public" ? <BallIcon size={22} /> : <TrophyIcon size={22} />}
@@ -170,8 +170,8 @@ function OwnerTools({ ch, code, onCode }) {
                   </span>
                   {!mb.is_owner && (
                     <button style={{ ...btn(false), padding: "5px 10px", fontSize: 11,
-                      color: confirmKick === mb.username ? "#2A1B00" : C.red,
-                      background: confirmKick === mb.username ? "linear-gradient(135deg,#FF8B8B,#E05555)" : "transparent",
+                      color: confirmKick === mb.username ? "#FFFFFF" : C.red,
+                      background: confirmKick === mb.username ? "#D6402C" : "transparent",
                       borderColor: "rgba(255,107,107,0.4)" }}
                       onClick={async () => {
                         if (confirmKick !== mb.username) { setConfirmKick(mb.username); setTimeout(() => setConfirmKick(null), 3000); return; }
@@ -228,9 +228,9 @@ function ChallengeView({ ch, matches, onBack }) {
     width: 26, height: 26, borderRadius: 999, display: "inline-flex", alignItems: "center",
     justifyContent: "center", fontSize: 12.5, fontWeight: 900, flexShrink: 0,
     color: rank === 1 ? "#2A1B00" : rank === 2 ? "#1A2040" : rank === 3 ? "#2A1505" : C.muted,
-    background: rank === 1 ? "linear-gradient(135deg,#F6C453,#E0962F)"
-      : rank === 2 ? "linear-gradient(135deg,#D7DCEE,#9BA3C4)"
-      : rank === 3 ? "linear-gradient(135deg,#E2A06A,#B06A35)" : "rgba(255,255,255,0.05)",
+    background: rank === 1 ? "#EF9F27"
+      : rank === 2 ? "#C9CCDA"
+      : rank === 3 ? "#D8915A" : "#F3EFE4",
   });
 
   return (
@@ -284,7 +284,7 @@ function ChallengeView({ ch, matches, onBack }) {
         <SectionTitle icon={<EyeIcon size={15} />}>توقعات الأعضاء — تنكشف بعد قفل المباراة</SectionTitle>
         <select value={matchId} onChange={(e) => loadPreds(e.target.value)} style={{
           width: "100%", padding: "11px 12px", borderRadius: 12, fontSize: 14, fontFamily: "inherit",
-          color: C.text, background: "#171E40", border: `1px solid ${C.line}`, outline: "none", marginTop: 10,
+          color: C.text, background: "#FFFFFF", border: `1px solid ${C.line}`, outline: "none", marginTop: 10,
         }}>
           <option value="">اختر مباراة مقفلة...</option>
           {lockedMatches.map((m) => (

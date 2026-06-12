@@ -228,7 +228,7 @@ function shareImageURL(m, story) {
   x.fillStyle = r && r.a > r.h ? C.gold : "#F4F6FF"; x.fillText(NAMES[m.b], W / 2 - off, cy.nm);
 
   const bx = 110, bw = W - 2 * bx;
-  x.fillStyle = "rgba(255,255,255,0.05)"; roundRect(x, bx, cy.bx, bw, cy.bh, 28); x.fill();
+  x.fillStyle = "#F3EFE4"; roundRect(x, bx, cy.bx, bw, cy.bh, 28); x.fill();
   x.strokeStyle = "rgba(255,255,255,0.10)"; x.lineWidth = 2; roundRect(x, bx, cy.bx, bw, cy.bh, 28); x.stroke();
   const rows = [
     "📅  " + m.dow + " · " + m.date,
@@ -406,7 +406,7 @@ function ShareChooser({ m, onPick, onClose }) {
   const big = (label, sub, emoji, story) => (
     <button onClick={() => onPick(story)} style={{
       flex: 1, cursor: "pointer", color: C.text, fontFamily: "inherit", padding: "16px 10px",
-      borderRadius: 16, border: `1px solid ${C.line}`, background: "rgba(255,255,255,0.04)",
+      borderRadius: 16, border: `1px solid ${C.line}`, background: "#F3EFE4",
       display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
     }}>
       <span style={{ fontSize: 30 }}>{emoji}</span>
@@ -416,7 +416,7 @@ function ShareChooser({ m, onPick, onClose }) {
   );
   return (
     <Backdrop onClose={onClose}>
-      <div onClick={(e) => e.stopPropagation()} dir="rtl" style={{ width: "100%", maxWidth: 360, background: "#171E40", border: `1px solid ${C.line}`, borderRadius: 22, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} dir="rtl" style={{ width: "100%", maxWidth: 360, background: "#FFFFFF", border: `1px solid ${C.line}`, borderRadius: 22, padding: 20 }}>
         <div style={{ color: C.gold, fontSize: 13, fontWeight: 700, textAlign: "center" }}>مشاركة البطاقة</div>
         <div style={{ color: C.text, fontSize: 16, fontWeight: 800, textAlign: "center", margin: "6px 0 16px" }}>{NAMES[m.a]} ضد {NAMES[m.b]}</div>
         <div style={{ display: "flex", gap: 12 }}>
@@ -439,7 +439,7 @@ function ImageModal({ data, onClose }) {
         <div style={{ display: "flex", gap: 10, width: "100%" }}>
           <button onClick={async () => { const ok = await tryNativeShare(data.url); if (!ok) setMsg("اضغط مطوّلاً على الصورة للحفظ 👆"); }} style={{
             flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14, padding: "12px", borderRadius: 14,
-            color: "#2A1B00", background: "linear-gradient(135deg,#F6C453,#E0962F)", border: "none",
+            color: "#FFFFFF", background: "#E0432F", border: "none",
           }}>📲 مشاركة</button>
           <button onClick={onClose} style={{ flex: "0 0 90px", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 14, padding: "12px", borderRadius: 14, color: C.muted, background: "transparent", border: `1px solid ${C.line}` }}>إغلاق</button>
         </div>

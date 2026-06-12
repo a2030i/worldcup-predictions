@@ -5,7 +5,7 @@ import { submitPrediction } from "../lib/api";
 import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, ksaParts } from "../lib/format";
 import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon } from "../icons.jsx";
 
-const KSA_GREEN = "#2BB45D";
+const KSA_GREEN = "#1B9E4B";
 
 /* عدّاد حي حتى لحظة قفل التوقعات — مُزامَن مع ساعة الخادم عبر clockOffset
    فتغيير ساعة الجهاز لا يغيّر الوقت المعروض (والقفل الفعلي في الخادم أصلًا) */
@@ -30,7 +30,7 @@ function fmtLeft(ms) {
 
 const numStyle = {
   width: 46, textAlign: "center", fontSize: 18, fontWeight: 800,
-  color: C.text, background: "rgba(255,255,255,0.06)",
+  color: C.text, background: "#FFFFFF",
   border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 0", outline: "none",
   fontVariantNumeric: "tabular-nums",
 };
@@ -56,8 +56,8 @@ function ProgressStrip({ matches }) {
         <span style={{ color: C.text, fontWeight: 800, fontSize: 13 }}>رحلتك نحو النهائي</span>
         <span className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 15 }}>{achieved} <span style={{ fontSize: 11, fontWeight: 700 }}>نقطة</span></span>
       </div>
-      <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.05)" }}>
-        {achieved > 0 && <span style={{ width: pct(achieved), background: "linear-gradient(90deg,#F6C453,#E0962F)" }} />}
+      <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "#F3EFE4" }}>
+        {achieved > 0 && <span style={{ width: pct(achieved), background: "#EF9F27" }} />}
         {lost > 0 && <span style={{ width: pct(lost), background: "rgba(255,107,107,0.45)" }} />}
         {remaining > 0 && <span style={{ width: pct(remaining), background: "rgba(43,180,93,0.4)" }} />}
       </div>
@@ -91,7 +91,7 @@ function RulesCard() {
         <div style={{ padding: "0 14px 14px", fontSize: 12.5, color: C.text, lineHeight: 2 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(95px, 1fr))", gap: 8, marginBottom: 10 }}>
             {order.map((s) => (
-              <div key={s} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
+              <div key={s} style={{ background: "#F3EFE4", borderRadius: 10, padding: "8px 4px", textAlign: "center" }}>
                 <div className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 17 }}>{STAGE_POINTS[s]}</div>
                 <div style={{ color: C.muted, fontSize: 10.5 }}>{STAGE_NAMES[s]}</div>
               </div>
@@ -158,7 +158,7 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const readOnly = saved && !editing; // المحفوظ يُعرض مقفولًا حتى يضغط «تعديل التوقع»
   const urgent = left < 60_000;
   return (
-    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(246,196,83,0.05)", border: `1px solid rgba(246,196,83,0.18)` }}>
+    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(239,159,39,0.07)", border: `1px solid rgba(184,119,26,0.28)` }}>
       <div style={{ textAlign: "center", color: C.muted, fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
         أصِب النتيجة بالضبط واكسب <b style={{ color: C.gold }}>{countWord(pts, "نقطة واحدة", "نقطتين", "نقاط")}</b>
         <span style={{ opacity: 0.75 }}> — أي نتيجة أخرى بدون نقاط</span>
@@ -180,13 +180,13 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
         <button onClick={() => { setEditing(true); setMsg(""); }} style={{
           width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
           padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
-          border: "1px solid rgba(246,196,83,0.45)",
+          border: "1px solid rgba(184,119,26,0.45)",
         }}>تعديل التوقع</button>
       ) : (
         <button onClick={save} disabled={busy} style={{
           width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-          padding: "11px 0", borderRadius: 10, border: "none", color: "#2A1B00",
-          background: "linear-gradient(135deg,#F6C453,#E0962F)", opacity: busy ? 0.6 : 1,
+          padding: "11px 0", borderRadius: 10, border: "none", color: "#FFFFFF",
+          background: "#E0432F", opacity: busy ? 0.6 : 1,
         }}>{busy ? "لحظات..." : saved ? "حفظ التعديل" : "أرسل توقعك"}</button>
       )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11.5 }}>
@@ -209,8 +209,8 @@ const Note = ({ children, muted, gold }) => (
   <div style={{
     marginTop: 10, padding: "8px 12px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
     color: gold ? C.gold : muted ? C.muted : C.text,
-    background: gold ? C.goldSoft : "rgba(255,255,255,0.04)",
-    border: `1px solid ${gold ? "rgba(246,196,83,0.3)" : C.line}`, textAlign: "center",
+    background: gold ? C.goldSoft : "#F3EFE4",
+    border: `1px solid ${gold ? "rgba(184,119,26,0.35)" : C.line}`, textAlign: "center",
     display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
   }}>{children}</div>
 );
@@ -276,7 +276,7 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
         <div style={{
           flex: "0 0 74px", display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", background: C.goldSoft, borderRadius: 12,
-          border: "1px solid rgba(246,196,83,0.25)", padding: "8px 4px", gap: 2,
+          border: "1px solid rgba(184,119,26,0.3)", padding: "8px 4px", gap: 2,
         }}>
           <span className="num" style={{ color: C.gold, fontSize: 18, fontWeight: 800, lineHeight: 1 }}>{m.t}</span>
           <span style={{ color: C.gold, fontSize: 11, opacity: 0.8 }}>{m.p === "م" ? "مساءً" : "صباحاً"}</span>
@@ -296,9 +296,9 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
               justifyContent: "center", pointerEvents: "none", background: "rgba(10,16,51,0.45)" }}>
               <div style={{ textAlign: "center", animation: "goalshout 4s ease forwards" }}>
                 <div style={{ fontSize: "clamp(52px, 17vw, 110px)", fontWeight: 900, lineHeight: 1,
-                  background: "linear-gradient(135deg,#FFE9A8,#F6C453 45%,#E0962F)",
-                  WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-                  textShadow: "0 0 50px rgba(246,196,83,0.4)", letterSpacing: "-2px" }}>
+                  color: "#FFD23F",
+
+                  textShadow: "0 0 50px rgba(184,119,26,0.4)", letterSpacing: "-2px" }}>
                   قوووول!
                 </div>
                 <div style={{ color: "#fff", fontSize: "clamp(16px, 5vw, 26px)", fontWeight: 800, marginTop: 8,
@@ -324,8 +324,8 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
               </span>
               {goal && (
                 <span style={{ fontSize: 12, fontWeight: 900, padding: "3px 12px", borderRadius: 999,
-                  color: "#2A1B00", background: "linear-gradient(135deg,#F6C453,#E0962F)",
-                  boxShadow: "0 0 16px rgba(246,196,83,0.55)", animation: "goalpop .9s ease" }}>
+                  color: "#FFFFFF", background: "#E0432F",
+                  boxShadow: "0 0 16px rgba(224,67,47,0.55)", animation: "goalpop .9s ease" }}>
                   هدف{goal === "a" ? ` لـ${NAMES[m.a]}` : goal === "b" ? ` لـ${NAMES[m.b]}` : ""}!
                 </span>
               )}
@@ -406,8 +406,8 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
             id={`day-${day.iso}${day.stage ? `-${day.stage}` : ""}`} style={{ scrollMarginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 2px 10px" }}>
               <span style={{
-                background: isToday ? "linear-gradient(135deg,#F6C453,#E0962F)" : hasKsa ? "rgba(43,180,93,0.16)" : "rgba(255,255,255,0.05)",
-                color: isToday ? "#2A1B00" : hasKsa ? KSA_GREEN : C.muted,
+                background: isToday ? "#2B6BE4" : hasKsa ? "rgba(43,180,93,0.16)" : "#F3EFE4",
+                color: isToday ? "#FFFFFF" : hasKsa ? KSA_GREEN : C.muted,
                 border: isToday ? "none" : `1px solid ${hasKsa ? "rgba(43,180,93,0.4)" : C.line}`,
                 fontWeight: 800, fontSize: 14, padding: "8px 16px", borderRadius: 999,
               }}>{day.dow} · {day.date}</span>
@@ -423,7 +423,7 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
                 {countWord(day.matches.length, "مباراة واحدة", "مباراتان", "مباريات")}
               </span>
             </div>
-            <div style={{ background: C.card, borderRadius: 18, padding: "4px 14px", border: isToday ? "1px solid rgba(246,196,83,0.4)" : `1px solid ${C.line}` }}>
+            <div style={{ background: C.card, borderRadius: 18, padding: "4px 14px", border: isToday ? "1px solid rgba(184,119,26,0.4)" : `1px solid ${C.line}` }}>
               {day.matches.map((m, i) => (
                 <MatchRow key={m.id} m={{ ...m, stage: byId[m.id]?.stage || m.stage }} state={byId[m.id]}
                   last={i === day.matches.length - 1} onChanged={onChanged} clockOffset={clockOffset} />
