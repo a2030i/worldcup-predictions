@@ -1027,3 +1027,48 @@ grant execute on function
   public.admin_integrity_report(uuid),
   public.admin_add_match(uuid, text, text, timestamptz, text, text)
 to anon, authenticated;
+
+-- ═══════════ نظام الجوائز: كوبونات المتاجر (2026-06-12) ═══════════
+-- كل توقع صحيح = جائزة معلقة · العضو يختار متجرًا (لا يتكرر له أبدًا
+-- عبر فهرس فريد جزئي على user_id+store_id) · الكوبون يظهر بعد الاختيار فقط
+
+create table if not exists wc.stores (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null check (char_length(trim(name)) between 2 and 60),
+  description   text,
+  coupon_code   text not null,
+  discount_text text not null,
+  url           text,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists wc.prizes (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null references wc.profiles(id) on delete cascade,
+  match_id   text not null references wc.matches(id) on delete cascade,
+  store_id   uuid references wc.stores(id) on delete restrict,
+  claimed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (user_id, match_id)
+);
+create unique index if not exists prizes_user_store_unique
+  on wc.prizes (user_id, store_id) where store_id is not null;
+create index if not exists prizes_user on wc.prizes (user_id);
+alter table wc.stores enable row level security;
+alter table wc.prizes enable row level security;
+
+-- الدوال المنفّذة (نسخها الكاملة في هجرات قاعدة البيانات):
+-- wc._grant_prizes(match) — تُستدعى من admin_set_result و sync_results
+-- my_prizes · prize_options · claim_prize (للأعضاء)
+-- admin_save_store · admin_toggle_store · admin_delete_store · admin_stores_stats
+
+grant execute on function
+  public.my_prizes(uuid),
+  public.prize_options(uuid, bigint),
+  public.claim_prize(uuid, bigint, uuid),
+  public.admin_save_store(uuid, text, text, text, text, text, uuid),
+  public.admin_toggle_store(uuid, uuid, boolean),
+  public.admin_delete_store(uuid, uuid),
+  public.admin_stores_stats(uuid)
+to anon, authenticated;

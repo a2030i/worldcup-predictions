@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { C } from "./theme";
-import { getSession, clearSession, getMatches, activeAnnouncement } from "./lib/api";
-import { CalendarIcon, ChartIcon, TrophyIcon, ShieldIcon, AlertIcon } from "./icons.jsx";
+import { getSession, clearSession, getMatches, activeAnnouncement, myPrizes } from "./lib/api";
+import { CalendarIcon, ChartIcon, TrophyIcon, ShieldIcon, AlertIcon, GiftIcon } from "./icons.jsx";
 import AuthScreen from "./components/AuthScreen.jsx";
 import ScheduleScreen from "./components/ScheduleScreen.jsx";
 import StandingsScreen from "./components/StandingsScreen.jsx";
 import ChallengesScreen from "./components/ChallengesScreen.jsx";
+import PrizesScreen from "./components/PrizesScreen.jsx";
 import AdminScreen from "./components/AdminScreen.jsx";
 
 const Tab = ({ on, onClick, icon, children }) => (
@@ -17,6 +18,9 @@ const Tab = ({ on, onClick, icon, children }) => (
     display: "inline-flex", alignItems: "center", gap: 7, transition: "all .15s ease",
   }}>{icon}{children}</button>
 );
+
+const countPrizeWord = (n) =>
+  n === 1 ? "جائزة" : n === 2 ? "جائزتان" : n <= 10 ? `${n} جوائز` : `${n} جائزة`;
 
 // شريط ألوان 26 الخمسة — توقيع الهوية
 const Strip26 = ({ width = 96, height = 4, margin = "6px auto 10px" }) => (
@@ -33,6 +37,7 @@ export default function App() {
   const [matches, setMatches] = useState(null); // حالة المباريات من الخادم (توقعي + النتائج)
   const [offline, setOffline] = useState(false);
   const [announce, setAnnounce] = useState(null); // إعلان الإدارة للأعضاء
+  const [pendingPrizes, setPendingPrizes] = useState(0); // جوائز بانتظار الاختيار
   // فارق ساعة الخادم عن الجهاز — يُزامن العدّادات فلا يؤثر تغيير ساعة الجهاز
   const [clockOffset, setClockOffset] = useState(0);
 
@@ -48,6 +53,7 @@ export default function App() {
         else setOffline(true); // خطأ شبكة: أبقِ آخر بيانات واعرض تنبيهًا
       });
     activeAnnouncement().then(setAnnounce).catch(() => {});
+    myPrizes().then((d) => setPendingPrizes(d?.pending?.length || 0)).catch(() => {});
   };
   const dismissedAnnounce = Number(localStorage.getItem("wc26_announce_seen") || 0);
   useEffect(refresh, [session]);
@@ -83,9 +89,27 @@ export default function App() {
           <Tab on={tab === "schedule"} onClick={() => setTab("schedule")} icon={<CalendarIcon />}>المباريات</Tab>
           <Tab on={tab === "standings"} onClick={() => setTab("standings")} icon={<ChartIcon />}>الترتيب</Tab>
           <Tab on={tab === "challenges"} onClick={() => setTab("challenges")} icon={<TrophyIcon />}>تحدياتي</Tab>
+          <Tab on={tab === "prizes"} onClick={() => setTab("prizes")} icon={<GiftIcon />}>
+            جوائزي
+            {pendingPrizes > 0 && (
+              <span className="num" style={{ background: "#E0432F", color: "#FFFFFF", fontSize: 10.5, fontWeight: 900,
+                minWidth: 17, height: 17, borderRadius: 999, display: "inline-flex",
+                alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{pendingPrizes}</span>
+            )}
+          </Tab>
           {session.isAdmin && <Tab on={tab === "admin"} onClick={() => setTab("admin")} icon={<ShieldIcon />}>الإدارة</Tab>}
         </div>
       </header>
+
+      {pendingPrizes > 0 && tab !== "prizes" && (
+        <button onClick={() => setTab("prizes")} style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          background: "rgba(224,67,47,0.08)", border: "2px solid rgba(224,67,47,0.45)",
+          color: "#C2331F", fontSize: 13, fontWeight: 800, borderRadius: 12, padding: "10px 12px",
+          marginBottom: 14, cursor: "pointer", fontFamily: "inherit" }}>
+          <GiftIcon size={16} /> مبروك! {countPrizeWord(pendingPrizes)} بانتظار اختيارك — اضغط للاستلام
+        </button>
+      )}
 
       {offline && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -111,6 +135,7 @@ export default function App() {
       {tab === "schedule" && <ScheduleScreen matches={matches} onChanged={refresh} clockOffset={clockOffset} />}
       {tab === "standings" && <StandingsScreen matches={matches} />}
       {tab === "challenges" && <ChallengesScreen matches={matches} />}
+      {tab === "prizes" && <PrizesScreen onChanged={refresh} />}
       {tab === "admin" && session.isAdmin && <AdminScreen matches={matches} onChanged={refresh} />}
     </Shell>
   );

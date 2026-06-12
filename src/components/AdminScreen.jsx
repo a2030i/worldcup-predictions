@@ -7,9 +7,10 @@ import {
   adminSetPhone, adminSetAdmin, adminDeletePrediction, adminListChallenges,
   adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
   adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
+  adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats,
 } from "../lib/api";
 import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints } from "../lib/format";
-import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon } from "../icons.jsx";
+import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
 
 const ClockIconSmall = () => <ClockIcon size={14} />;
 
@@ -578,12 +579,111 @@ function ChallengesTab() {
   );
 }
 
+/* ───────────── الجوائز: إدارة المتاجر والكوبونات ───────────── */
+function StoresTab() {
+  const [stats, setStats] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState(null); // متجر قيد التعديل
+  const [f, setF] = useState({ name: "", coupon: "", discount: "", description: "", url: "" });
+
+  const load = () => adminStoresStats().then(setStats).catch((e) => setMsg(e.message));
+  useEffect(() => { load(); }, []);
+
+  const startEdit = (s) => {
+    setEditing(s.id);
+    setF({ name: s.name, coupon: s.coupon_code, discount: s.discount_text, description: s.description || "", url: s.url || "" });
+  };
+  const reset = () => { setEditing(null); setF({ name: "", coupon: "", discount: "", description: "", url: "" }); };
+
+  return (
+    <>
+      <Card title={editing ? "تعديل المتجر" : "إضافة متجر جديد"}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          <input style={field} value={f.name} maxLength={60} placeholder="اسم المتجر *"
+            onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.coupon} maxLength={40} placeholder="كود الكوبون *"
+            onChange={(e) => setF({ ...f, coupon: e.target.value })} />
+          <input style={field} value={f.discount} maxLength={60} placeholder="نص الخصم * مثل: خصم يصل إلى 15%"
+            onChange={(e) => setF({ ...f, discount: e.target.value })} />
+          <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.url} placeholder="رابط المتجر (اختياري)"
+            onChange={(e) => setF({ ...f, url: e.target.value })} />
+        </div>
+        <textarea style={{ ...field, width: "100%", marginTop: 8, resize: "vertical", lineHeight: 1.8 }} rows={2}
+          value={f.description} maxLength={200} placeholder="وصف قصير يظهر للعضو عند الاختيار (اختياري)"
+          onChange={(e) => setF({ ...f, description: e.target.value })} />
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button style={gold} onClick={async () => {
+            try {
+              await adminSaveStore(f.name, f.coupon, f.discount, f.description || null, f.url || null, editing);
+              setMsg(editing ? "عُدّل المتجر ✓" : "أُضيف المتجر ✓"); reset(); load();
+            } catch (e) { setMsg(e.message); }
+          }}>{editing ? "حفظ التعديل" : "إضافة المتجر"}</button>
+          {editing && <button style={ghost} onClick={reset}>إلغاء التعديل</button>}
+        </div>
+      </Card>
+
+      {stats && (
+        <Card title={`المتاجر (${stats.stores.length}) — جوائز معلقة بانتظار الاختيار: ${stats.pending_total}`}>
+          {stats.stores.length === 0 && (
+            <p style={{ color: C.muted, fontSize: 12.5, margin: 0, lineHeight: 1.9 }}>
+              لا متاجر بعد — أضف أول متجر أعلاه ليبدأ الفائزون باستلام جوائزهم.
+            </p>
+          )}
+          {stats.stores.map((s) => (
+            <div key={s.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.line}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ flex: 1, minWidth: 130 }}>
+                  <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>
+                    {s.name}
+                    {!s.active && <span style={{ fontSize: 10.5, color: C.red, background: "rgba(214,64,44,0.1)", padding: "2px 8px", borderRadius: 999, fontWeight: 800, marginRight: 6 }}>مسحوب</span>}
+                  </span>
+                  <span style={{ display: "block", color: C.muted, fontSize: 11.5, marginTop: 2 }}>
+                    {s.discount_text} · الكود: <b dir="ltr" style={{ color: C.gold }}>{s.coupon_code}</b>
+                  </span>
+                </span>
+                <span className="num" style={{ color: Number(s.chosen_count) > 0 ? C.gold : C.muted, fontWeight: 900, fontSize: 14, textAlign: "center" }}>
+                  {s.chosen_count}<span style={{ display: "block", fontSize: 9.5, fontWeight: 700, color: C.muted }}>اختاروه</span>
+                </span>
+                <button style={{ ...ghost, padding: "6px 11px", fontSize: 11.5 }} onClick={() => startEdit(s)}>تعديل</button>
+                <button style={{ ...ghost, padding: "6px 11px", fontSize: 11.5 }} onClick={async () => {
+                  try { await adminToggleStore(s.id, !s.active); setMsg(s.active ? "سُحب المتجر من السلة ✓" : "أُعيد المتجر للسلة ✓"); load(); }
+                  catch (e) { setMsg(e.message); }
+                }}>{s.active ? "سحب" : "إعادة"}</button>
+                {Number(s.chosen_count) === 0 && (
+                  <ConfirmButton label="حذف" confirmLabel="تأكيد" style={{ ...danger, padding: "6px 11px", fontSize: 11.5 }}
+                    onConfirm={async () => {
+                      try { await adminDeleteStore(s.id); setMsg("حُذف المتجر ✓"); load(); } catch (e) { setMsg(e.message); }
+                    }} />
+                )}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {stats?.recent_claims?.length > 0 && (
+        <Card title="آخر الاستلامات">
+          {stats.recent_claims.map((c, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, padding: "7px 0", fontSize: 12.5, borderBottom: `1px solid ${C.line}`, flexWrap: "wrap" }}>
+              <span style={{ flex: 1, color: C.text, fontWeight: 700 }}>{c.display_name} <span dir="ltr" style={{ color: C.muted, fontSize: 11 }}>@{c.username}</span></span>
+              <span style={{ color: C.gold, fontWeight: 800 }}>{c.store_name}</span>
+              <span className="num" style={{ color: C.muted, fontSize: 11 }}>{fmtTime(c.claimed_at)}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 13, textAlign: "center", fontWeight: 700 }}>{msg}</p>}
+    </>
+  );
+}
+
 /* ───────────── 5) سجل العمليات ───────────── */
 const ACTION_LABELS = {
   set_result: "اعتماد نتيجة", reschedule: "تأجيل مباراة", cancel_match: "إلغاء مباراة",
   reset_pin: "إعادة تعيين رمز", ban: "حظر", unban: "رفع حظر", rename: "تغيير اسم عرض",
   set_phone: "تسجيل جوال", delete_prediction: "حذف توقع", delete_challenge: "حذف تحدٍّ",
   make_admin: "ترقية مشرف", remove_admin: "سحب إشراف",
+  save_store: "حفظ متجر", store_on: "إعادة متجر", store_off: "سحب متجر", delete_store: "حذف متجر",
 };
 
 function IntegrityCard() {
@@ -656,6 +756,7 @@ export default function AdminScreen({ matches, onChanged }) {
     ["matches", "المباريات", <BallIcon size={14} key="i" />],
     ["users", "الأعضاء", <UsersIcon size={14} key="i" />],
     ["challenges", "التحديات", <TrophyIcon size={14} key="i" />],
+    ["stores", "الجوائز", <GiftIcon size={14} key="i" />],
     ["audit", "السجل", <ListIcon size={14} key="i" />],
   ];
   return (
@@ -675,6 +776,7 @@ export default function AdminScreen({ matches, onChanged }) {
       {tab === "matches" && <MatchesTab matches={matches} onChanged={onChanged} />}
       {tab === "users" && <UsersTab />}
       {tab === "challenges" && <ChallengesTab />}
+      {tab === "stores" && <StoresTab />}
       {tab === "audit" && <AuditTab />}
     </div>
   );

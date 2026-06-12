@@ -43,6 +43,12 @@ const ERRORS = {
   NOT_OWNER: "هذه العملية لمنشئ التحدي (أو المشرف) فقط",
   CANT_KICK_OWNER: "لا يمكن طرد منشئ التحدي",
   ANNOUNCE_INVALID: "نص الإعلان: من حرفين إلى 250 حرفًا",
+  PRIZE_NOT_FOUND: "الجائزة غير موجودة",
+  PRIZE_CLAIMED: "استلمت هذه الجائزة مسبقًا",
+  STORE_NOT_AVAILABLE: "هذا المتجر غير متاح حاليًا",
+  STORE_ALREADY_CHOSEN: "اخترت هذا المتجر في جائزة سابقة — اختر متجرًا آخر",
+  STORE_HAS_CLAIMS: "لا يمكن حذف متجر استُلمت منه جوائز — عطّله بدلًا من ذلك",
+  STORE_INVALID: "أكمل بيانات المتجر (الاسم والكوبون ونص الخصم)",
   MATCH_EXISTS: "هذه المباراة مضافة مسبقًا",
   STAGE_INVALID: "اختر مرحلة صحيحة",
   TEAM_INVALID: "اختر منتخبين صحيحين",
@@ -89,6 +95,16 @@ export const joinChallenge   = (code) => rpc("join_challenge", { p_token: tok(),
 export const leaderboard     = (challengeId) => rpc("leaderboard", { p_token: tok(), p_challenge_id: challengeId });
 export const myRanks         = () => rpc("my_ranks", { p_token: tok() });
 export const dayStars        = (date = null) => rpc("day_stars", { p_token: tok(), p_date: date });
+
+// ── الجوائز ──
+export const myPrizes     = () => rpc("my_prizes", { p_token: tok() });
+export const prizeOptions = (prizeId) => rpc("prize_options", { p_token: tok(), p_prize_id: prizeId });
+export const claimPrize   = (prizeId, storeId) => rpc("claim_prize", { p_token: tok(), p_prize_id: prizeId, p_store_id: storeId });
+export const adminSaveStore   = (name, coupon, discount, description = null, url = null, id = null) =>
+  rpc("admin_save_store", { p_token: tok(), p_name: name, p_coupon: coupon, p_discount: discount, p_description: description, p_url: url, p_id: id });
+export const adminToggleStore = (id, active) => rpc("admin_toggle_store", { p_token: tok(), p_store_id: id, p_active: active });
+export const adminDeleteStore = (id) => rpc("admin_delete_store", { p_token: tok(), p_store_id: id });
+export const adminStoresStats = () => rpc("admin_stores_stats", { p_token: tok() });
 export const activeAnnouncement = () => rpc("active_announcement", { p_token: tok() });
 
 // ── إدارة التحدي (المالك أو المشرف) ──

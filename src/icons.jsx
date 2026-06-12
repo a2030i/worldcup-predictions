@@ -68,6 +68,10 @@ export const CheckIcon = (p) => <I {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></I
 export const RefreshIcon = (p) => (
   <I {...p}><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v4.3h-4.3" /></I>
 );
+export const GiftIcon = (p) => (
+  <I {...p}><rect x="4" y="9.5" width="16" height="4" rx="1.5" /><path d="M5.5 13.5V19a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5.5M12 9.5v11" />
+    <path d="M12 9.3C10.8 7 9 5.2 7.4 6.1c-1.6.9-.9 3.2 1 3.4zM12 9.3c1.2-2.3 3-4.1 4.6-3.2 1.6.9.9 3.2-1 3.4z" /></I>
+);
 export const ListIcon = (p) => (
   <I {...p}><path d="M8.5 6.5h12M8.5 12h12M8.5 17.5h12" /><path d="M4 6.5h.01M4 12h.01M4 17.5h.01" strokeWidth="2.6" /></I>
 );
