@@ -259,10 +259,11 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
     prevLive.current = { h: nh, a: na };
   }, [state?.live_h, state?.live_a]);
   return (
-    <div style={{
+    <div id={`match-${m.id}`} style={{
       padding: "14px 6px", borderBottom: last ? "none" : `1px solid ${C.line}`,
       background: ksa ? "rgba(43,180,93,0.07)" : "transparent", borderRadius: ksa ? 12 : 0,
       borderRight: ksa ? `3px solid ${KSA_GREEN}` : "3px solid transparent",
+      scrollMarginTop: 10,
     }}>
       {ksa && (
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8,
@@ -370,13 +371,18 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
     }))
     .filter((d) => d.matches.length > 0);
 
-  // قفزة تلقائية ليوم اليوم — الجدول يطول مع تقدم البطولة
+  // قفزة تلقائية للمباراة الحية، وإلا القادمة الأقرب — مرة واحدة بعد وصول البيانات
+  // (إن كانت كل المباريات منتهية تبقى الصفحة من أعلاها)
+  const didScroll = useRef(false);
   useEffect(() => {
-    const el = document.getElementById(`day-${today}`);
-    if (el && SCHEDULE[0]?.iso !== today) {
-      setTimeout(() => el.scrollIntoView({ block: "start", behavior: "instant" }), 80);
-    }
-  }, []);
+    if (didScroll.current || !matches?.length) return;
+    const target = matches.find((r) => r.status === "scheduled"); // مرتبة بوقت الانطلاق: الحية أولًا ثم القادمة
+    if (!target || matches[0]?.id === target.id) { didScroll.current = true; return; }
+    didScroll.current = true;
+    setTimeout(() => {
+      document.getElementById(`match-${target.id}`)?.scrollIntoView({ block: "start", behavior: "instant" });
+    }, 120);
+  }, [matches]);
 
   return (
     <>
