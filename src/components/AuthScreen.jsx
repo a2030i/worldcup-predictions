@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { C } from "../theme";
 import { register, login, saveSession } from "../lib/api";
+import { digitsOnly } from "../lib/format";
+import { BallIcon, EyeIcon, EyeOffIcon } from "../icons.jsx";
 
 const field = {
   width: "100%", padding: "13px 14px", borderRadius: 12, fontSize: 15,
@@ -20,11 +22,13 @@ export default function AuthScreen({ onAuth }) {
   const [displayName, setDisplayName] = useState(""); // الاسم الظاهر في المنافسة
   const [phone, setPhone] = useState("");             // 05xxxxxxxx
   const [pin, setPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const registering = mode === "register";
 
   const go = async () => {
+    if (busy) return;
     if (registering) {
       if (!/^[A-Za-z0-9_]{3,20}$/.test(username.trim())) { setErr("اسم الدخول: حروف إنجليزية وأرقام فقط (3–20 خانة)"); return; }
       if (displayName.trim().length < 2) { setErr("اكتب اسم العرض من حرفين على الأقل"); return; }
@@ -44,12 +48,12 @@ export default function AuthScreen({ onAuth }) {
   };
 
   return (
-    <div className="block" style={{ maxWidth: 380, margin: "8vh auto 0" }}>
+    <div className="block" style={{ maxWidth: 380, margin: "7vh auto 0" }}>
       <div style={{ textAlign: "center", marginBottom: 22 }}>
-        <div style={{ fontSize: 44 }}>⚽</div>
+        <div style={{ color: C.gold }}><BallIcon size={46} style={{ strokeWidth: 1.4 }} /></div>
         <h1 style={{ color: C.text, fontSize: 26, fontWeight: 900, margin: "8px 0 4px" }}>تحدي توقعات كأس العالم</h1>
         <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.8, margin: 0 }}>
-          توقّع نتائج المباريات ونافس الجميع — بدون إيميل
+          توقّع نتائج مونديال 2026 ونافس الجميع على الصدارة
         </p>
       </div>
 
@@ -58,7 +62,7 @@ export default function AuthScreen({ onAuth }) {
           {[["login", "تسجيل دخول"], ["register", "عضو جديد"]].map(([m, label]) => (
             <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{
               flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-              padding: "10px 0", borderRadius: 12,
+              padding: "11px 0", borderRadius: 12,
               border: `1px solid ${mode === m ? C.gold : C.line}`,
               background: mode === m ? C.goldSoft : "transparent",
               color: mode === m ? C.gold : C.muted,
@@ -78,17 +82,30 @@ export default function AuthScreen({ onAuth }) {
             <input style={field} value={displayName} maxLength={20}
               onChange={(e) => setDisplayName(e.target.value)} placeholder="مثال: أبو فهد" />
 
-            <Label hint="للتواصل عند توزيع الجوائز 🏆">رقم الجوال</Label>
+            <Label hint="للتواصل عند توزيع الجوائز">رقم الجوال</Label>
             <input style={{ ...field, direction: "ltr", textAlign: "left" }} value={phone}
               inputMode="numeric" maxLength={10}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} placeholder="05xxxxxxxx" />
+              onChange={(e) => setPhone(digitsOnly(e.target.value))} placeholder="05xxxxxxxx" />
           </>
         )}
 
         <Label hint={registering ? "احفظه، تحتاجه من أي جهاز آخر" : null}>رمز سري (4–6 أرقام)</Label>
-        <input style={field} value={pin} inputMode="numeric" maxLength={6} type="password"
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="••••"
-          onKeyDown={(e) => e.key === "Enter" && go()} />
+        <div style={{ position: "relative" }}>
+          <input style={{ ...field, paddingLeft: 44 }} value={pin} inputMode="numeric" maxLength={6}
+            type={showPin ? "text" : "password"}
+            onChange={(e) => setPin(digitsOnly(e.target.value))} placeholder="••••"
+            onKeyDown={(e) => e.key === "Enter" && go()} />
+          <button onClick={() => setShowPin(!showPin)} aria-label={showPin ? "إخفاء الرمز" : "إظهار الرمز"}
+            style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
+              background: "transparent", border: "none", cursor: "pointer", color: C.muted, padding: 8 }}>
+            {showPin ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+          </button>
+        </div>
+        {!registering && (
+          <p style={{ color: C.muted, fontSize: 11.5, margin: "8px 0 0", opacity: 0.8 }}>
+            نسيت رمزك؟ تواصل مع المشرف ليعيد تعيينه لك.
+          </p>
+        )}
 
         {err && <div style={{ color: C.red, fontSize: 13, marginTop: 12, textAlign: "center" }}>{err}</div>}
 
@@ -97,7 +114,7 @@ export default function AuthScreen({ onAuth }) {
           fontWeight: 900, fontSize: 16, padding: "13px 0", borderRadius: 14, border: "none",
           color: "#2A1B00", background: "linear-gradient(135deg,#F6C453,#E0962F)",
           opacity: busy ? 0.6 : 1,
-        }}>{busy ? "لحظات..." : registering ? "🚀 انضم للتحدي" : "دخول"}</button>
+        }}>{busy ? "لحظات..." : registering ? "انضم للتحدي" : "دخول"}</button>
       </div>
     </div>
   );

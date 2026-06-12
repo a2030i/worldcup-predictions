@@ -4,7 +4,7 @@ import { NAMES, GROUPS, flag } from "../data/tournament";
 
 const COLW = { p: 30, rec: 48, gd: 36, pts: 40 };
 const Cell = ({ w, children, style }) => (
-  <span style={{ width: w, textAlign: "center", flex: "0 0 auto", ...style }}>{children}</span>
+  <span className="num" style={{ width: w, textAlign: "center", flex: "0 0 auto", ...style }}>{children}</span>
 );
 
 // الترتيب يُبنى من النتائج المعتمدة في قاعدة البيانات (لا من ملف ثابت)
@@ -27,18 +27,31 @@ function buildStats(matches) {
 
 export default function StandingsScreen({ matches }) {
   const st = useMemo(() => buildStats(matches), [matches]);
+
+  // قبل وصول بيانات الخادم لا نعرض أصفارًا مضللة
+  if (matches === null) {
+    return <p style={{ color: C.muted, fontSize: 13, textAlign: "center", marginTop: 30 }}>جاري تحميل الترتيب...</p>;
+  }
+
   return (
     <>
       <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: "0 0 4px", lineHeight: 1.8 }}>
-        🟢 أول منتخبين يتأهلان مباشرة (+ أفضل ٨ من أصحاب المركز الثالث)<br />الترتيب يتحدّث تلقائيًا مع كل نتيجة معتمدة
+        <span style={{ color: C.green }}>●</span> أول منتخبين يتأهلان مباشرة (+ أفضل 8 من أصحاب المركز الثالث)
+        <br />ترتيب استرشادي يتحدّث تلقائيًا مع كل نتيجة معتمدة
       </p>
       {Object.keys(GROUPS).map((letter) => {
         const order = GROUPS[letter].slice().sort((a, b) =>
           (st[b].pts - st[a].pts) || ((st[b].gf - st[b].ga) - (st[a].gf - st[a].ga)) || (st[b].gf - st[a].gf));
+        const hasKsa = GROUPS[letter].includes("SA");
         return (
           <section className="block" key={letter}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "22px 2px 10px" }}>
-              <span style={{ background: "linear-gradient(135deg,#7C3AED,#4338CA)", color: "#fff", fontWeight: 800, fontSize: 15, padding: "8px 16px", borderRadius: 999 }}>المجموعة {letter}</span>
+              <span style={{
+                background: hasKsa ? "rgba(43,180,93,0.16)" : C.goldSoft,
+                color: hasKsa ? "#2BB45D" : C.gold,
+                border: `1px solid ${hasKsa ? "rgba(43,180,93,0.4)" : "rgba(246,196,83,0.35)"}`,
+                fontWeight: 800, fontSize: 14, padding: "8px 16px", borderRadius: 999,
+              }}>المجموعة {letter}</span>
               <span style={{ flex: 1, height: 1, background: C.line }} />
             </div>
             <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "6px 12px" }}>
@@ -56,14 +69,19 @@ export default function StandingsScreen({ matches }) {
                     background: top ? "rgba(139,228,155,0.06)" : "transparent",
                     borderRight: top ? `2px solid ${C.green}` : "2px solid transparent", borderRadius: top ? 6 : 0,
                   }}>
-                    <span style={{ width: 18, flex: "0 0 auto", textAlign: "center", color: C.muted, fontSize: 12.5 }}>{i + 1}</span>
+                    <span className="num" style={{ width: 18, flex: "0 0 auto", textAlign: "center", color: C.muted, fontSize: 12.5 }}>{i + 1}</span>
                     <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                       <span style={{ fontSize: 19 }}>{flag(code)}</span>
                       <span style={{ color: ksa ? C.gold : C.text, fontWeight: ksa ? 800 : 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[code]}</span>
                     </span>
                     <Cell w={COLW.p} style={{ color: C.muted, fontSize: 13 }}>{s.p}</Cell>
-                    <Cell w={COLW.rec} style={{ color: C.text, fontSize: 13 }}>{s.w}-{s.d}-{s.l}</Cell>
-                    <Cell w={COLW.gd} style={{ color: gd > 0 ? C.green : gd < 0 ? "#FF8585" : C.muted, fontSize: 13 }}>{gd > 0 ? `+${gd}` : gd}</Cell>
+                    {/* القيمة LTR بترتيب خ-ت-ف: تحت رأس «ف-ت-خ» العربي يقع الفوز يمينًا كما يُقرأ */}
+                    <Cell w={COLW.rec} style={{ color: C.text, fontSize: 13 }}>
+                      <span dir="ltr">{s.l}-{s.d}-{s.w}</span>
+                    </Cell>
+                    <Cell w={COLW.gd} style={{ color: gd > 0 ? C.green : gd < 0 ? "#FF8585" : C.muted, fontSize: 13 }}>
+                      <span dir="ltr">{gd > 0 ? `+${gd}` : gd}</span>
+                    </Cell>
                     <Cell w={COLW.pts} style={{ color: C.gold, fontWeight: 800, fontSize: 15 }}>{s.pts}</Cell>
                   </div>
                 );
