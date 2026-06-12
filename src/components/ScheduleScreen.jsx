@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { C } from "../theme";
-import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId } from "../data/tournament";
+import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction } from "../lib/api";
 
 /* عدّاد حي حتى لحظة قفل التوقعات (قبل الانطلاق بـ 5 ثوانٍ)
@@ -159,7 +159,7 @@ export default function ScheduleScreen({ matches, onChanged }) {
     .map((d) => ({
       ...d,
       matches: d.matches
-        .map((m) => ({ ...m, id: matchId(d.iso, m.a, m.b) }))
+        .map((m) => ({ ...m, id: matchId(d.iso, m.a, m.b), kickoff: kickoffISO(d.iso, m.t, m.p) }))
         .filter((m) => !arabOnly || ARAB.includes(m.a) || ARAB.includes(m.b)),
     }))
     .filter((d) => d.matches.length > 0);
