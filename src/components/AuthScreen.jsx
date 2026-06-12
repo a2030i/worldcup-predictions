@@ -71,10 +71,10 @@ export default function AuthScreen({ onAuth }) {
         </div>
 
         <Label hint={registering ? "إنجليزي وأرقام، تدخل به من أي جهاز" : null}>اسم الدخول</Label>
-        <input style={{ ...field, direction: "ltr", textAlign: registering ? "left" : "right" }}
+        <input style={{ ...field, direction: "ltr", textAlign: "left" }}
           value={username} maxLength={20} autoCapitalize="none" autoCorrect="off"
-          onChange={(e) => setUsername(registering ? e.target.value.replace(/[^A-Za-z0-9_]/g, "") : e.target.value)}
-          placeholder={registering ? "abu_fahad7" : "اسم الدخول"} />
+          onChange={(e) => setUsername(e.target.value.replace(/[^A-Za-z0-9_]/g, ""))}
+          placeholder="abu_fahad7" />
 
         {registering && (
           <>

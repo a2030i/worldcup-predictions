@@ -54,6 +54,11 @@ create unique index if not exists profiles_username_lower_unique on wc.profiles 
 create unique index if not exists profiles_phone_unique on wc.profiles (phone) where phone is not null;
 -- قرار منتج: اسم العرض يجوز تكراره — اسم الدخول والجوال وحدهما الفريدان
 drop index if exists wc.profiles_display_name_unique;
+-- اسم الدخول لاتيني/أرقام/شرطة سفلية فقط — قيد جدول لا يُتجاوز من أي مسار
+do $$ begin
+  alter table wc.profiles add constraint profiles_username_format
+    check (username ~ '^[A-Za-z0-9_]{3,20}$');
+exception when duplicate_object then null; end $$;
 
 create table if not exists wc.challenges (
   id          uuid primary key default gen_random_uuid(),
