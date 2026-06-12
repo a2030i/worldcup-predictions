@@ -113,8 +113,8 @@ export default function ChallengesScreen({ matches }) {
           </span>
           {ranks[ch.id] && (
             <span style={{ textAlign: "center", flexShrink: 0 }}>
-              <span className="num" style={{ display: "block", color: Number(ranks[ch.id].my_rank) === 1 ? C.gold : C.text, fontWeight: 900, fontSize: 16 }}>
-                {Number(ranks[ch.id].my_rank) === 1 ? "الأول" : `${ranks[ch.id].my_rank} من ${ranks[ch.id].members}`}
+              <span className="num" style={{ display: "block", color: Number(ranks[ch.id].my_rank) === 1 ? C.gold : C.text, fontWeight: 900, fontSize: 15 }}>
+                {Number(ranks[ch.id].my_rank) === 1 ? `الأول من ${ranks[ch.id].members}` : `${ranks[ch.id].my_rank} من ${ranks[ch.id].members}`}
               </span>
               <span className="num" style={{ display: "block", color: C.muted, fontSize: 10.5 }}>{ranks[ch.id].my_points} نقطة</span>
             </span>
@@ -188,12 +188,12 @@ function ChallengeView({ ch, matches, onBack }) {
       )}
 
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "8px 14px", marginTop: 8 }}>
-        <div style={{ display: "flex", color: C.muted, fontSize: 11.5, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
+        <div style={{ display: "flex", color: C.muted, fontSize: 11, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
           <span style={{ width: 34 }}>#</span>
           <span style={{ flex: 1 }}>العضو</span>
-          <span style={{ width: 44, textAlign: "center" }}>أصاب</span>
-          <span style={{ width: 40, textAlign: "center" }}>لعب</span>
-          <span style={{ width: 48, textAlign: "center" }}>نقاط</span>
+          <span style={{ width: 52, textAlign: "center" }}>توقعاته</span>
+          <span style={{ width: 50, textAlign: "center" }}>الصحيحة</span>
+          <span style={{ width: 44, textAlign: "center" }}>النقاط</span>
         </div>
         {!board && !err && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>جاري التحميل...</p>}
         {board?.map((r, i) => (
@@ -204,9 +204,9 @@ function ChallengeView({ ch, matches, onBack }) {
           }}>
             <span style={{ width: 34 }}><span style={rankStyle(i)}>{i + 1}</span></span>
             <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.username}</span>
-            <span className="num" style={{ width: 44, textAlign: "center", color: C.green, fontSize: 13 }}>{r.exact_count}</span>
-            <span className="num" style={{ width: 40, textAlign: "center", color: C.muted, fontSize: 13 }}>{r.played}</span>
-            <span className="num" style={{ width: 48, textAlign: "center", color: C.gold, fontWeight: 900, fontSize: 16 }}>{r.points}</span>
+            <span className="num" style={{ width: 52, textAlign: "center", color: C.muted, fontSize: 13 }}>{r.played}</span>
+            <span className="num" style={{ width: 50, textAlign: "center", color: C.green, fontSize: 13 }}>{r.exact_count}</span>
+            <span className="num" style={{ width: 44, textAlign: "center", color: C.gold, fontWeight: 900, fontSize: 16 }}>{r.points}</span>
           </div>
         ))}
         {board?.length === 0 && <p style={{ color: C.muted, fontSize: 13, textAlign: "center" }}>لا أعضاء بعد</p>}

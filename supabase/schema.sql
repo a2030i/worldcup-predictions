@@ -408,7 +408,7 @@ begin
     coalesce(sum(wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage)), 0),
     count(*) filter (where p.h = m.result_h and p.a = m.result_a),
     count(*) filter (where sign(p.h - p.a) = sign(m.result_h - m.result_a)),
-    count(m.id)
+    (select count(*) from wc.predictions pp where pp.user_id = pr.id)  -- إجمالي توقعاته (عمود «توقعاته» في الواجهة)
   from wc.memberships mb
   join wc.profiles pr on pr.id = mb.user_id and not pr.is_banned
   left join wc.predictions p on p.user_id = mb.user_id

@@ -62,9 +62,9 @@ function ProgressStrip({ matches }) {
         {remaining > 0 && <span style={{ width: pct(remaining), background: "rgba(43,180,93,0.4)" }} />}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, fontWeight: 700, flexWrap: "wrap", gap: 6 }}>
-        <span style={{ color: C.gold }}>حققت {achieved}</span>
-        <span style={{ color: "#FF9B9B" }}>فاتك {lost}</span>
-        <span style={{ color: KSA_GREEN }}>متبقٍ {remaining} نقطة متاحة</span>
+        <span style={{ color: C.gold }}>حققت {countWord(achieved, "نقطة واحدة", "نقطتين", "نقاط")}</span>
+        <span style={{ color: "#FF9B9B" }}>فاتك {countWord(lost, "نقطة واحدة", "نقطتين", "نقاط")}</span>
+        <span style={{ color: KSA_GREEN }}>متبقٍ {countWord(remaining, "نقطة واحدة", "نقطتين", "نقاط")} متاحة</span>
       </div>
       <div style={{ color: C.muted, fontSize: 10.5, marginTop: 6, textAlign: "center", opacity: 0.85 }}>
         النهائي وحده يساوي 20 نقطة — لا أحد محسوم قبل النهاية
@@ -99,8 +99,8 @@ function RulesCard() {
           </div>
           <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.9 }}>
             • التوقع الصحيح = <b style={{ color: C.text }}>النتيجة بالضبط</b> (توقعت 2–1 وانتهت 2–1) — وتأخذ نقاط مرحلتها كاملة، وأي نتيجة أخرى صفر.<br />
-            • التوقعات <b style={{ color: C.text }}>تُقفل قبل انطلاق المباراة بـ 5 ثوانٍ بتوقيت الخادم</b> — تغيير ساعة جهازك لا يفيد، وبعد القفل لا يمكن التعديل أبدًا.<br />
-            • يمكنك تعديل توقعك بحرية قبل القفل، ويُسجَّل وقت آخر تعديل.<br />
+            • التوقعات <b style={{ color: C.text }}>تُقفل عند انطلاق المباراة بتوقيت مكة</b> — وبعد القفل لا يمكن التعديل أبدًا، وتغيير ساعة جهازك لا يفيد.<br />
+            • يمكنك تعديل توقعك بحرية قبل انطلاق المباراة، ويُسجَّل وقت آخر تعديل.<br />
             • عند تساوي النقاط: <b style={{ color: C.text }}>الأسبق في تسجيل توقعاته الصحيحة يتقدم</b> — حتى لو بفارق ثوانٍ، وأوقات الجميع معروضة بعد القفل للمصداقية.
           </div>
         </div>
@@ -115,6 +115,7 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const [a, setA] = useState(state?.my_a ?? "");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false); // التوقع المحفوظ لا يُعدَّل إلا بزر «تعديل»
 
   const locksAt = state?.locks_at || new Date(new Date(m.kickoff).getTime() - 5000).toISOString();
   const left = useCountdown(locksAt, clockOffset);
@@ -148,30 +149,46 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
     try {
       await submitPrediction(m.id, Number(h), Number(a));
       setMsg("تم حفظ توقعك ✓");
+      setEditing(false);
       onChanged?.();
     } catch (e) { setMsg(e.message); }
     setBusy(false);
   };
 
+  const readOnly = saved && !editing; // المحفوظ يُعرض مقفولًا حتى يضغط «تعديل التوقع»
   const urgent = left < 60_000;
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(246,196,83,0.05)", border: `1px solid rgba(246,196,83,0.18)` }}>
+      <div style={{ textAlign: "center", color: C.muted, fontSize: 11.5, fontWeight: 700, marginBottom: 8 }}>
+        أصِب النتيجة بالضبط واكسب <b style={{ color: C.gold }}>{countWord(pts, "نقطة واحدة", "نقطتين", "نقاط")}</b>
+        <span style={{ opacity: 0.75 }}> — أي نتيجة أخرى بدون نقاط</span>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
         <span style={{ flex: 1, minWidth: 0, color: C.muted, fontSize: 12, fontWeight: 700, textAlign: "left",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.a]}</span>
-        <input inputMode="numeric" maxLength={2} value={h}
-          onChange={(e) => setH(digitsOnly(e.target.value))} style={numStyle} aria-label={`أهداف ${NAMES[m.a]}`} />
+        <input inputMode="numeric" maxLength={2} value={h} disabled={readOnly}
+          onChange={(e) => setH(digitsOnly(e.target.value))}
+          style={{ ...numStyle, opacity: readOnly ? 0.65 : 1 }} aria-label={`أهداف ${NAMES[m.a]}`} />
         <span style={{ color: C.muted, fontWeight: 800 }}>–</span>
-        <input inputMode="numeric" maxLength={2} value={a}
-          onChange={(e) => setA(digitsOnly(e.target.value))} style={numStyle} aria-label={`أهداف ${NAMES[m.b]}`} />
+        <input inputMode="numeric" maxLength={2} value={a} disabled={readOnly}
+          onChange={(e) => setA(digitsOnly(e.target.value))}
+          style={{ ...numStyle, opacity: readOnly ? 0.65 : 1 }} aria-label={`أهداف ${NAMES[m.b]}`} />
         <span style={{ flex: 1, minWidth: 0, color: C.muted, fontSize: 12, fontWeight: 700, textAlign: "right",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.b]}</span>
       </div>
-      <button onClick={save} disabled={busy} style={{
-        width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-        padding: "11px 0", borderRadius: 10, border: "none", color: "#2A1B00",
-        background: "linear-gradient(135deg,#F6C453,#E0962F)", opacity: busy ? 0.6 : 1,
-      }}>{busy ? "لحظات..." : saved ? "تعديل التوقع" : `أرسل توقعك (تساوي ${pts} ${pts >= 3 ? "نقاط" : "نقطة"})`}</button>
+      {readOnly ? (
+        <button onClick={() => { setEditing(true); setMsg(""); }} style={{
+          width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+          padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
+          border: "1px solid rgba(246,196,83,0.45)",
+        }}>تعديل التوقع</button>
+      ) : (
+        <button onClick={save} disabled={busy} style={{
+          width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+          padding: "11px 0", borderRadius: 10, border: "none", color: "#2A1B00",
+          background: "linear-gradient(135deg,#F6C453,#E0962F)", opacity: busy ? 0.6 : 1,
+        }}>{busy ? "لحظات..." : saved ? "حفظ التعديل" : "أرسل توقعك"}</button>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11.5 }}>
         <span className="num" style={{ color: urgent ? C.red : C.muted, fontWeight: urgent ? 800 : 600,
           animation: urgent ? "pulse 1.2s infinite" : "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -337,7 +354,7 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
         );
       })}
       <p style={{ color: C.muted, fontSize: 11.5, textAlign: "center", marginTop: 26, opacity: 0.72, lineHeight: 1.8 }}>
-        المواعيد بتوقيت المملكة (مكة) · التوقع الصحيح = النتيجة بالضبط · القفل قبل الانطلاق بـ 5 ثوانٍ بتوقيت الخادم
+        المواعيد بتوقيت مكة المكرمة · التوقع الصحيح = النتيجة بالضبط · التوقعات تُقفل عند انطلاق المباراة
       </p>
     </>
   );
