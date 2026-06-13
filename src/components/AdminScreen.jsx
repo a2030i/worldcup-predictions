@@ -7,7 +7,8 @@ import {
   adminSetPhone, adminSetAdmin, adminDeletePrediction, adminListChallenges,
   adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
   adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
-  adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats,
+  adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats, adminAddCodes,
+  adminSetLive, adminFinishLive,
 } from "../lib/api";
 import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints } from "../lib/format";
 import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
@@ -138,14 +139,82 @@ function AnnounceComposer() {
   );
 }
 
+/* وحدة التحكم الحي: الأدمن يُدخل الأهداف لحظيًا فتصل للجميع بثوانٍ مع قوووول */
+function LiveConsole({ matches, onChanged }) {
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  // المباريات التي انطلقت ولم تُعتمد بعد (المرشحة للتحكم الحي)
+  const live = (matches || []).filter((r) =>
+    r.status === "scheduled" && new Date(r.kickoff_at) <= new Date());
+  if (live.length === 0) return null;
+
+  const bump = async (r, dh, da) => {
+    const h = Math.max(0, (r.live_h ?? 0) + dh);
+    const a = Math.max(0, (r.live_a ?? 0) + da);
+    setBusy(r.id);
+    try { await adminSetLive(r.id, h, a); onChanged?.(); } catch (e) { setMsg(e.message); }
+    setBusy("");
+  };
+
+  const stepper = (label, onMinus, onPlus, val) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <button onClick={onMinus} style={{ ...ghost, padding: "4px 11px", fontSize: 16, fontWeight: 900 }}>−</button>
+      <span className="num" style={{ minWidth: 22, textAlign: "center", fontWeight: 900, fontSize: 18, color: C.text }}>{val}</span>
+      <button onClick={onPlus} style={{ ...gold, padding: "4px 11px", fontSize: 16, fontWeight: 900 }}>+</button>
+    </div>
+  );
+
+  return (
+    <Card title="التحكم المباشر بالنتيجة (أثناء المباراة)">
+      <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.7 }}>
+        تشاهد المباراة؟ أدخِل كل هدف فور حدوثه ليصل لكل الأعضاء خلال ثوانٍ مع تأثير «قوووول». المزامنة التلقائية تبقى احتياطًا.
+      </p>
+      {live.map((r) => {
+        const [, a, b] = r.id.split("_");
+        return (
+          <div key={r.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: C.text, fontWeight: 800, fontSize: 13.5 }}>{NAMES[a]}</span>
+                {stepper(a, () => bump(r, -1, 0), () => bump(r, 1, 0), r.live_h ?? 0)}
+              </div>
+              <span style={{ color: C.muted, fontWeight: 800 }}>×</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {stepper(b, () => bump(r, 0, -1), () => bump(r, 0, 1), r.live_a ?? 0)}
+                <span style={{ color: C.text, fontWeight: 800, fontSize: 13.5 }}>{NAMES[b]}</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              {r.live_h != null && (
+                <span style={{ color: C.red, fontSize: 11.5, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ animation: "pulse 1.6s infinite" }}>●</span> مباشر {r.live_h}–{r.live_a}
+                </span>
+              )}
+              <ConfirmButton label="إنهاء واعتماد النتيجة" confirmLabel="تأكيد الاعتماد النهائي؟" style={{ ...gold, padding: "7px 14px", fontSize: 12 }}
+                onConfirm={async () => {
+                  setBusy(r.id);
+                  try { await adminFinishLive(r.id); setMsg("اعتُمدت النتيجة ✓ — احتُسبت النقاط والجوائز"); onChanged?.(); }
+                  catch (e) { setMsg(e.message); }
+                  setBusy("");
+                }} />
+            </div>
+          </div>
+        );
+      })}
+      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12.5, textAlign: "center", fontWeight: 700, margin: "8px 0 0" }}>{msg}</p>}
+    </Card>
+  );
+}
+
 /* ───────────── لوحة اليوم: مباريات اليوم بحالتها + نجوم آخر يوم ───────────── */
-function TodayTab({ matches }) {
+function TodayTab({ matches, onChanged }) {
   const [stars, setStars] = useState(null);
   useEffect(() => { dayStars().then(setStars).catch(() => {}); }, []);
   const todayIso = ksaParts(new Date().toISOString()).iso;
   const todays = (matches || []).filter((r) => ksaParts(r.kickoff_at).iso === todayIso);
   return (
     <>
+      <LiveConsole matches={matches} onChanged={onChanged} />
       <Card title={`مباريات اليوم (${todays.length})`}>
         {todays.length === 0 && <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>لا مباريات اليوم</p>}
         {todays.map((r) => {
@@ -583,41 +652,80 @@ function ChallengesTab() {
 function StoresTab() {
   const [stats, setStats] = useState(null);
   const [msg, setMsg] = useState("");
-  const [editing, setEditing] = useState(null); // متجر قيد التعديل
-  const [f, setF] = useState({ name: "", coupon: "", discount: "", description: "", url: "" });
+  const [editing, setEditing] = useState(null); // جائزة قيد التعديل
+  const [f, setF] = useState({ kind: "discount", name: "", coupon: "", creditValue: "", codes: "", discount: "", description: "", url: "" });
+  const [codesFor, setCodesFor] = useState(null); // إضافة أكواد لرصيد قائم
+  const [codesText, setCodesText] = useState("");
 
   const load = () => adminStoresStats().then(setStats).catch((e) => setMsg(e.message));
   useEffect(() => { load(); }, []);
 
   const startEdit = (s) => {
     setEditing(s.id);
-    setF({ name: s.name, coupon: s.coupon_code, discount: s.discount_text, description: s.description || "", url: s.url || "" });
+    setF({ kind: s.kind, name: s.name, coupon: s.coupon_code || "", creditValue: s.credit_value || "",
+      codes: "", discount: s.discount_text, description: s.description || "", url: s.url || "" });
   };
-  const reset = () => { setEditing(null); setF({ name: "", coupon: "", discount: "", description: "", url: "" }); };
+  const reset = () => { setEditing(null); setF({ kind: "discount", name: "", coupon: "", creditValue: "", codes: "", discount: "", description: "", url: "" }); };
+  const isCredit = f.kind === "credit";
+
+  const kindBtn = (k, label) => (
+    <button onClick={() => setF({ ...f, kind: k })} style={{
+      cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12.5,
+      padding: "8px 14px", borderRadius: 999,
+      border: `1px solid ${f.kind === k ? "#2B6BE4" : C.line}`,
+      background: f.kind === k ? "#2B6BE4" : C.card, color: f.kind === k ? "#FFFFFF" : C.muted,
+    }}>{label}</button>
+  );
 
   return (
     <>
-      <Card title={editing ? "تعديل المتجر" : "إضافة متجر جديد"}>
+      <Card title={editing ? "تعديل الجائزة" : "إضافة جائزة جديدة"}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          {kindBtn("discount", "كوبون خصم (كود مشترك يتكرر)")}
+          {kindBtn("credit", "رصيد مشتريات (أكواد فردية تُستهلك)")}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
           <input style={field} value={f.name} maxLength={60} placeholder="اسم المتجر *"
             onChange={(e) => setF({ ...f, name: e.target.value })} />
-          <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.coupon} maxLength={40} placeholder="كود الكوبون *"
-            onChange={(e) => setF({ ...f, coupon: e.target.value })} />
-          <input style={field} value={f.discount} maxLength={60} placeholder="نص الخصم * مثل: خصم يصل إلى 15%"
+          {isCredit ? (
+            <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.creditValue} inputMode="numeric"
+              placeholder="قيمة الرصيد بالريال * مثل: 50"
+              onChange={(e) => setF({ ...f, creditValue: digitsOnly(e.target.value) })} />
+          ) : (
+            <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.coupon} maxLength={40} placeholder="كود الكوبون *"
+              onChange={(e) => setF({ ...f, coupon: e.target.value })} />
+          )}
+          <input style={field} value={f.discount} maxLength={60}
+            placeholder={isCredit ? "النص الظاهر * مثل: رصيد مشتريات 50 ريال" : "نص الخصم * مثل: خصم يصل إلى 15%"}
             onChange={(e) => setF({ ...f, discount: e.target.value })} />
           <input dir="ltr" style={{ ...field, textAlign: "left" }} value={f.url} placeholder="رابط المتجر (اختياري)"
             onChange={(e) => setF({ ...f, url: e.target.value })} />
         </div>
+        {isCredit && !editing && (
+          <textarea dir="ltr" style={{ ...field, width: "100%", marginTop: 8, resize: "vertical", lineHeight: 1.8, textAlign: "left" }} rows={4}
+            value={f.codes} placeholder={"ألصق أكواد الرصيد هنا — كود في كل سطر:\nGIFT-A1B2\nGIFT-C3D4\n..."}
+            onChange={(e) => setF({ ...f, codes: e.target.value })} />
+        )}
         <textarea style={{ ...field, width: "100%", marginTop: 8, resize: "vertical", lineHeight: 1.8 }} rows={2}
           value={f.description} maxLength={200} placeholder="وصف قصير يظهر للعضو عند الاختيار (اختياري)"
           onChange={(e) => setF({ ...f, description: e.target.value })} />
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <button style={gold} onClick={async () => {
             try {
-              await adminSaveStore(f.name, f.coupon, f.discount, f.description || null, f.url || null, editing);
-              setMsg(editing ? "عُدّل المتجر ✓" : "أُضيف المتجر ✓"); reset(); load();
+              const r = await adminSaveStore({
+                name: f.name, discount: f.discount, kind: f.kind,
+                coupon: isCredit ? null : f.coupon,
+                creditValue: isCredit ? Number(f.creditValue) : null,
+                description: f.description || null, url: f.url || null, id: editing,
+              });
+              let extra = "";
+              if (isCredit && !editing && f.codes.trim()) {
+                const added = await adminAddCodes(r.id, f.codes);
+                extra = ` — أُضيف ${added.added} كودًا`;
+              }
+              setMsg((editing ? "عُدّلت الجائزة ✓" : "أُضيفت الجائزة ✓") + extra); reset(); load();
             } catch (e) { setMsg(e.message); }
-          }}>{editing ? "حفظ التعديل" : "إضافة المتجر"}</button>
+          }}>{editing ? "حفظ التعديل" : "إضافة الجائزة"}</button>
           {editing && <button style={ghost} onClick={reset}>إلغاء التعديل</button>}
         </div>
       </Card>
@@ -635,15 +743,29 @@ function StoresTab() {
                 <span style={{ flex: 1, minWidth: 130 }}>
                   <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>
                     {s.name}
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 8px", borderRadius: 999, marginRight: 6,
+                      color: s.kind === "credit" ? "#0F6E56" : C.gold,
+                      background: s.kind === "credit" ? "rgba(25,195,156,0.14)" : C.goldSoft }}>
+                      {s.kind === "credit" ? `رصيد ${s.credit_value} ريال` : "كوبون خصم"}
+                    </span>
                     {!s.active && <span style={{ fontSize: 10.5, color: C.red, background: "rgba(214,64,44,0.1)", padding: "2px 8px", borderRadius: 999, fontWeight: 800, marginRight: 6 }}>مسحوب</span>}
                   </span>
                   <span style={{ display: "block", color: C.muted, fontSize: 11.5, marginTop: 2 }}>
-                    {s.discount_text} · الكود: <b dir="ltr" style={{ color: C.gold }}>{s.coupon_code}</b>
+                    {s.discount_text}
+                    {s.kind === "discount" && <> · الكود: <b dir="ltr" style={{ color: C.gold }}>{s.coupon_code}</b></>}
+                    {s.kind === "credit" && (
+                      <> · المخزون: <b className="num" style={{ color: Number(s.codes_free) <= 5 ? C.red : C.green }}>
+                        {s.codes_free}</b> متاح من {s.codes_total}</>
+                    )}
                   </span>
                 </span>
                 <span className="num" style={{ color: Number(s.chosen_count) > 0 ? C.gold : C.muted, fontWeight: 900, fontSize: 14, textAlign: "center" }}>
                   {s.chosen_count}<span style={{ display: "block", fontSize: 9.5, fontWeight: 700, color: C.muted }}>اختاروه</span>
                 </span>
+                {s.kind === "credit" && (
+                  <button style={{ ...ghost, padding: "6px 11px", fontSize: 11.5 }}
+                    onClick={() => { setCodesFor(codesFor === s.id ? null : s.id); setCodesText(""); }}>إضافة أكواد</button>
+                )}
                 <button style={{ ...ghost, padding: "6px 11px", fontSize: 11.5 }} onClick={() => startEdit(s)}>تعديل</button>
                 <button style={{ ...ghost, padding: "6px 11px", fontSize: 11.5 }} onClick={async () => {
                   try { await adminToggleStore(s.id, !s.active); setMsg(s.active ? "سُحب المتجر من السلة ✓" : "أُعيد المتجر للسلة ✓"); load(); }
@@ -656,6 +778,20 @@ function StoresTab() {
                     }} />
                 )}
               </div>
+              {codesFor === s.id && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <textarea dir="ltr" style={{ ...field, flex: 1, minWidth: 180, resize: "vertical", lineHeight: 1.7, textAlign: "left" }}
+                    rows={3} value={codesText} placeholder={"كود في كل سطر\nGIFT-XXXX\nGIFT-YYYY"}
+                    onChange={(e) => setCodesText(e.target.value)} />
+                  <button style={gold} onClick={async () => {
+                    try {
+                      const r = await adminAddCodes(s.id, codesText);
+                      setMsg(`أُضيف ${r.added} كودًا ✓ — المتاح الآن: ${r.free}`);
+                      setCodesFor(null); setCodesText(""); load();
+                    } catch (e) { setMsg(e.message); }
+                  }}>إضافة للمخزون</button>
+                </div>
+              )}
             </div>
           ))}
         </Card>
@@ -667,6 +803,7 @@ function StoresTab() {
             <div key={i} style={{ display: "flex", gap: 8, padding: "7px 0", fontSize: 12.5, borderBottom: `1px solid ${C.line}`, flexWrap: "wrap" }}>
               <span style={{ flex: 1, color: C.text, fontWeight: 700 }}>{c.display_name} <span dir="ltr" style={{ color: C.muted, fontSize: 11 }}>@{c.username}</span></span>
               <span style={{ color: C.gold, fontWeight: 800 }}>{c.store_name}</span>
+              {c.assigned_code && <span dir="ltr" className="num" style={{ color: "#0F6E56", fontSize: 11, fontWeight: 800 }}>{c.assigned_code}</span>}
               <span className="num" style={{ color: C.muted, fontSize: 11 }}>{fmtTime(c.claimed_at)}</span>
             </div>
           ))}
@@ -771,7 +908,7 @@ export default function AdminScreen({ matches, onChanged }) {
           }}>{icon}{label}</button>
         ))}
       </div>
-      {tab === "today" && <TodayTab matches={matches} />}
+      {tab === "today" && <TodayTab matches={matches} onChanged={onChanged} />}
       {tab === "overview" && <OverviewTab />}
       {tab === "matches" && <MatchesTab matches={matches} onChanged={onChanged} />}
       {tab === "users" && <UsersTab />}

@@ -1072,3 +1072,11 @@ grant execute on function
   public.admin_delete_store(uuid, uuid),
   public.admin_stores_stats(uuid)
 to anon, authenticated;
+
+-- ═══════ نوعا الجوائز + تحكم حي + توقيت العضو (2026-06-13) ═══════
+-- stores.kind ('discount' كود مشترك | 'credit' رصيد بقيمة) + store_codes
+-- (مخزون أكواد فردية، سحب ذري بـ FOR UPDATE SKIP LOCKED، نفاد تلقائي)
+-- admin_set_live / admin_finish_live: تحكم الأدمن الفوري بالنتيجة أثناء
+-- المباراة (يتجاوز تأخر مزود النتائج المجاني) — النسخ الكاملة في الهجرات.
+-- ملاحظة واجهة: توقيت العضو حسب جهازه اختياري (lib/format tzParts) —
+-- القفل والتخزين بوقت مطلق (timestamptz) فلا يتأثر بالمنطقة.

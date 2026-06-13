@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
-import { NAMES, ARAB, SCHEDULE, flag, todayISO, matchId, kickoffISO } from "../data/tournament";
+import { NAMES, ARAB, SCHEDULE, flag, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction, getSession } from "../lib/api";
-import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, ksaParts } from "../lib/format";
+import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints,
+  tzParts, getTZ, setTZ, MECCA_TZ, deviceTZ, tzDiffersFromMecca, tzLabel } from "../lib/format";
 import { generateShareCard, shareBlob } from "../lib/shareCard";
 import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon, ShareIcon } from "../icons.jsx";
 
@@ -420,36 +421,42 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
 
 export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) {
   const [arabOnly, setArabOnly] = useState(false);
-  const today = todayISO();
+  const [tz, setTzState] = useState(getTZ());        // منطقة العرض المختارة
+  const showTzToggle = useMemo(() => tzDiffersFromMecca(), []);
   // فهرس حالة الخادم لكل مباراة (توقعي، النتيجة، لحظة القفل...)
   const byId = useMemo(() => Object.fromEntries((matches || []).map((r) => [r.id, r])), [matches]);
 
-  const staticDays = SCHEDULE.map((d) => ({
-    ...d,
-    matches: d.matches.map((m) => ({ ...m, id: matchId(d.iso, m.a, m.b), kickoff: kickoffISO(d.iso, m.t, m.p) })),
-  }));
-
-  // مباريات الأدوار الإقصائية تُضاف في الخادم تلقائيًا — نبنيها هنا ديناميكيًا
-  const staticIds = useMemo(() => new Set(staticDays.flatMap((d) => d.matches.map((m) => m.id))), []);
-  const dynamicDays = useMemo(() => {
-    const extra = (matches || []).filter((r) => !staticIds.has(r.id) && r.status !== "cancelled");
-    const byDay = {};
-    extra.forEach((r) => {
+  // كل المباريات بوقتها المطلق: الثابتة (مجموعات) + الديناميكية (إقصائيات من الخادم)
+  const allMatches = useMemo(() => {
+    const list = SCHEDULE.flatMap((d) =>
+      d.matches.map((m) => ({ id: matchId(d.iso, m.a, m.b), a: m.a, b: m.b, c: m.c, stage: "group",
+        kickoff: kickoffISO(d.iso, m.t, m.p) })));
+    const staticIds = new Set(list.map((m) => m.id));
+    (matches || []).filter((r) => !staticIds.has(r.id) && r.status !== "cancelled").forEach((r) => {
       const [, a, b] = r.id.split("_");
-      const k = ksaParts(r.kickoff_at);
-      byDay[k.iso] ||= { iso: k.iso, dow: k.dow, date: k.date, stage: r.stage, matches: [] };
-      byDay[k.iso].matches.push({ id: r.id, a, b, t: k.t, p: k.p, kickoff: r.kickoff_at, stage: r.stage });
+      list.push({ id: r.id, a, b, stage: r.stage || "group", kickoff: r.kickoff_at });
     });
-    Object.values(byDay).forEach((d) => d.matches.sort((x, y) => new Date(x.kickoff) - new Date(y.kickoff)));
-    return Object.values(byDay).sort((x, y) => (x.iso < y.iso ? -1 : 1));
+    return list;
   }, [matches]);
 
-  const days = [...staticDays, ...dynamicDays]
-    .map((d) => ({
-      ...d,
-      matches: d.matches.filter((m) => !arabOnly || ARAB.includes(m.a) || ARAB.includes(m.b)),
-    }))
-    .filter((d) => d.matches.length > 0);
+  // التجميع باليوم في المنطقة المختارة — تبديل التوقيت يعيد ترتيب الأيام كاملة
+  const today = tzParts(new Date(Date.now() + clockOffset).toISOString(), tz).iso;
+  const days = useMemo(() => {
+    const byDay = {};
+    allMatches.forEach((m) => {
+      if (arabOnly && !ARAB.includes(m.a) && !ARAB.includes(m.b)) return;
+      const k = tzParts(m.kickoff, tz);
+      const key = k.iso;
+      byDay[key] ||= { iso: k.iso, dow: k.dow, date: k.date, stage: m.stage, matches: [] };
+      if (m.stage !== "group") byDay[key].stage = m.stage;
+      byDay[key].matches.push({ ...m, t: k.t, p: k.p });
+    });
+    const out = Object.values(byDay);
+    out.forEach((d) => d.matches.sort((x, y) => new Date(x.kickoff) - new Date(y.kickoff)));
+    return out.sort((x, y) => (x.iso < y.iso ? -1 : 1));
+  }, [allMatches, arabOnly, tz]);
+
+  const pickTz = (t) => { setTZ(t); setTzState(t); };
 
   // قفزة تلقائية للمباراة الحية، وإلا القادمة الأقرب — مرة واحدة بعد وصول البيانات
   // (إن كانت كل المباريات منتهية تبقى الصفحة من أعلاها)
@@ -468,6 +475,20 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
     <>
       <ProgressStrip matches={matches} />
       <RulesCard />
+      {showTzToggle && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, margin: "10px 0 2px" }}>
+          <span style={{ color: C.muted, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <ClockIcon size={13} /> التوقيت:
+          </span>
+          {[[MECCA_TZ, "مكة"], [deviceTZ(), `بلدك (${tzLabel(deviceTZ())})`]].map(([t, label]) => (
+            <button key={t} onClick={() => pickTz(t)} style={{
+              border: `1px solid ${tz === t ? C.blue : C.line}`, cursor: "pointer",
+              background: tz === t ? C.blue : C.card, color: tz === t ? "#FFFFFF" : C.muted,
+              fontFamily: "inherit", fontWeight: 700, fontSize: 12, padding: "7px 14px", borderRadius: 999,
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "center", gap: 8, margin: "10px 0 4px" }}>
         {[["كل المباريات", false], ["المنتخبات العربية", true]].map(([label, v]) => (
           <button key={label} onClick={() => setArabOnly(v)} style={{
@@ -513,7 +534,7 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
         );
       })}
       <p style={{ color: C.muted, fontSize: 11.5, textAlign: "center", marginTop: 26, opacity: 0.72, lineHeight: 1.8 }}>
-        المواعيد بتوقيت مكة المكرمة · التوقع الصحيح = النتيجة بالضبط · التوقعات تُقفل عند انطلاق المباراة
+        المواعيد بتوقيت {tz === MECCA_TZ ? "مكة المكرمة" : tzLabel(tz)} · التوقع الصحيح = النتيجة بالضبط · التوقعات تُقفل عند انطلاق المباراة
       </p>
     </>
   );

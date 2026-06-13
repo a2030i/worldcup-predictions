@@ -35,21 +35,45 @@ export function downloadCSV(filename, headers, rows) {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// توقيت مكة لعرض المباريات المضافة ديناميكيًا (الأدوار الإقصائية)
-const KSA_DOW = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-const KSA_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-export function ksaParts(iso) {
+// ─── التوقيت: مكة افتراضيًا، مع خيار توقيت دولة العضو ───
+const AR_DOW = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+
+const TZ_KEY = "wc26_tz";
+export const MECCA_TZ = "Asia/Riyadh";
+// منطقة الجهاز المكتشفة (لعضو خارج السعودية)
+export function deviceTZ() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || MECCA_TZ; } catch { return MECCA_TZ; }
+}
+// التفضيل المحفوظ: "Asia/Riyadh" (مكة) أو منطقة جهاز العضو
+export const getTZ = () => localStorage.getItem(TZ_KEY) || MECCA_TZ;
+export const setTZ = (tz) => localStorage.setItem(TZ_KEY, tz);
+// هل توقيت الجهاز يختلف فعلًا عن مكة؟ (نُظهر الخيار فقط حينها)
+export function tzDiffersFromMecca() {
+  const dev = deviceTZ();
+  if (dev === MECCA_TZ) return false;
+  const now = new Date();
+  const off = (z) => new Intl.DateTimeFormat("en-US", { timeZone: z, hour: "2-digit", hour12: false }).format(now);
+  return off(dev) !== off(MECCA_TZ);
+}
+// اسم عربي مختصر للمنطقة (آخر جزء من المعرّف)
+export const tzLabel = (tz) => (tz === MECCA_TZ ? "مكة" : (tz.split("/").pop() || tz).replace(/_/g, " "));
+
+// أجزاء التاريخ والوقت في منطقة محددة (افتراضيًا التفضيل المحفوظ)
+export function tzParts(iso, tz = getTZ()) {
   const d = new Date(iso);
   const p = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Riyadh", year: "numeric", month: "numeric", day: "numeric",
+    timeZone: tz, year: "numeric", month: "numeric", day: "numeric",
     hour: "numeric", minute: "2-digit", hour12: true, weekday: "short",
   }).formatToParts(d).reduce((o, x) => ((o[x.type] = x.value), o), {});
   const dowIdx = new Date(`${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}T12:00:00Z`).getUTCDay();
   return {
     iso: `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`,
-    dow: KSA_DOW[dowIdx],
-    date: `${Number(p.day)} ${KSA_MONTHS[Number(p.month) - 1]}`,
+    dow: AR_DOW[dowIdx],
+    date: `${Number(p.day)} ${AR_MONTHS[Number(p.month) - 1]}`,
     t: `${p.hour}:${p.minute}`,
     p: p.dayPeriod === "pm" ? "م" : "ص",
   };
 }
+// توافق خلفي: ksaParts تبقى لكنها تتبع التفضيل المحفوظ الآن
+export const ksaParts = (iso) => tzParts(iso);

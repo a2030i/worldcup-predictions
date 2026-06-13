@@ -48,7 +48,9 @@ const ERRORS = {
   STORE_NOT_AVAILABLE: "هذا المتجر غير متاح حاليًا",
   STORE_ALREADY_CHOSEN: "اخترت هذا المتجر في جائزة سابقة — اختر متجرًا آخر",
   STORE_HAS_CLAIMS: "لا يمكن حذف متجر استُلمت منه جوائز — عطّله بدلًا من ذلك",
-  STORE_INVALID: "أكمل بيانات المتجر (الاسم والكوبون ونص الخصم)",
+  STORE_INVALID: "أكمل بيانات الجائزة (الاسم ونص الخصم — وكود الكوبون لنوع الخصم)",
+  VALUE_REQUIRED: "حدد قيمة الرصيد بالريال",
+  CREDIT_SOLD_OUT: "نفدت أكواد هذا الرصيد للتو — اختر جائزة أخرى",
   MATCH_EXISTS: "هذه المباراة مضافة مسبقًا",
   STAGE_INVALID: "اختر مرحلة صحيحة",
   TEAM_INVALID: "اختر منتخبين صحيحين",
@@ -100,8 +102,11 @@ export const dayStars        = (date = null) => rpc("day_stars", { p_token: tok(
 export const myPrizes     = () => rpc("my_prizes", { p_token: tok() });
 export const prizeOptions = (prizeId) => rpc("prize_options", { p_token: tok(), p_prize_id: prizeId });
 export const claimPrize   = (prizeId, storeId) => rpc("claim_prize", { p_token: tok(), p_prize_id: prizeId, p_store_id: storeId });
-export const adminSaveStore   = (name, coupon, discount, description = null, url = null, id = null) =>
-  rpc("admin_save_store", { p_token: tok(), p_name: name, p_coupon: coupon, p_discount: discount, p_description: description, p_url: url, p_id: id });
+export const adminSaveStore = ({ name, discount, kind, coupon = null, creditValue = null, description = null, url = null, id = null }) =>
+  rpc("admin_save_store", { p_token: tok(), p_name: name, p_discount: discount, p_kind: kind,
+    p_coupon: coupon, p_credit_value: creditValue, p_description: description, p_url: url, p_id: id });
+export const adminAddCodes = (storeId, codes) =>
+  rpc("admin_add_codes", { p_token: tok(), p_store_id: storeId, p_codes: codes });
 export const adminToggleStore = (id, active) => rpc("admin_toggle_store", { p_token: tok(), p_store_id: id, p_active: active });
 export const adminDeleteStore = (id) => rpc("admin_delete_store", { p_token: tok(), p_store_id: id });
 export const adminStoresStats = () => rpc("admin_stores_stats", { p_token: tok() });
@@ -121,6 +126,8 @@ export const adminReschedule = (matchId, kickoffISO) =>
 export const adminCancelMatch = (matchId) =>
   rpc("admin_cancel_match", { p_token: tok(), p_match_id: matchId });
 export const adminMatchStats = (matchId) => rpc("admin_match_stats", { p_token: tok(), p_match_id: matchId });
+export const adminSetLive    = (matchId, h, a) => rpc("admin_set_live", { p_token: tok(), p_match_id: matchId, p_h: h, p_a: a });
+export const adminFinishLive  = (matchId) => rpc("admin_finish_live", { p_token: tok(), p_match_id: matchId });
 
 // ── الأدمن: الأعضاء ──
 export const adminOverview   = () => rpc("admin_overview", { p_token: tok() });

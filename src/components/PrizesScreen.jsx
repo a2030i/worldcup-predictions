@@ -45,8 +45,20 @@ function StorePicker({ prize, onBack, onClaimed }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
         {options?.map((s) => (
           <div key={s.id} style={{ background: C.card, border: `1px solid ${confirming === s.id ? "#E0432F" : C.line}`, borderRadius: 16, padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div>
+              <span style={{ fontSize: 10.5, fontWeight: 800, padding: "3px 9px", borderRadius: 999,
+                color: s.kind === "credit" ? "#0F6E56" : C.gold,
+                background: s.kind === "credit" ? "rgba(25,195,156,0.14)" : C.goldSoft }}>
+                {s.kind === "credit" ? `رصيد مشتريات ${s.credit_value} ريال` : "كوبون خصم"}
+              </span>
+            </div>
             <div style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{s.name}</div>
             <div style={{ color: C.gold, fontSize: 12.5, fontWeight: 800 }}>{s.discount_text}</div>
+            {s.kind === "credit" && (
+              <div className="num" style={{ fontSize: 11, fontWeight: 800, color: Number(s.remaining) <= 5 ? C.red : C.muted }}>
+                {Number(s.remaining) <= 5 ? `متبقي ${s.remaining} فقط — بادر!` : `متبقي ${s.remaining}`}
+              </div>
+            )}
             {s.description && <div style={{ color: C.muted, fontSize: 11.5, lineHeight: 1.7, flex: 1 }}>{s.description}</div>}
             <button style={{ ...btn(confirming === s.id), justifyContent: "center", padding: "9px 10px", fontSize: 12.5 }}
               onClick={async () => {
@@ -70,7 +82,13 @@ function Reveal({ claim, onDone }) {
     <div className="block" style={{ textAlign: "center", padding: "20px 0" }}>
       <div style={{ color: "#E0432F" }}><GiftIcon size={46} style={{ strokeWidth: 1.4 }} /></div>
       <h2 style={{ color: C.text, fontWeight: 900, fontSize: 20, margin: "10px 0 2px" }}>مبروك! جائزتك من {claim.store_name}</h2>
-      <p style={{ color: C.gold, fontWeight: 800, fontSize: 14, margin: "0 0 14px" }}>{claim.discount_text}</p>
+      <p style={{ color: C.gold, fontWeight: 800, fontSize: 14, margin: "0 0 6px" }}>{claim.discount_text}</p>
+      {claim.kind === "credit" && (
+        <p style={{ color: "#0F6E56", fontWeight: 800, fontSize: 12.5, margin: "0 0 12px",
+          background: "rgba(25,195,156,0.12)", display: "inline-block", padding: "5px 14px", borderRadius: 999 }}>
+          كود رصيد بقيمة {claim.credit_value} ريال — استخدام واحد فقط، لا تشاركه مع أحد
+        </p>
+      )}
       <div dir="ltr" style={{ display: "inline-flex", alignItems: "center", gap: 10, background: C.card, border: `2px dashed #E0432F`, borderRadius: 14, padding: "12px 20px" }}>
         <span className="num" style={{ fontSize: 22, fontWeight: 900, letterSpacing: 2, color: C.text }}>{claim.coupon_code}</span>
         <button aria-label="نسخ الكوبون" style={{ ...btn(false), padding: "8px 10px" }} onClick={async () => {
@@ -144,8 +162,15 @@ export default function PrizesScreen({ onChanged }) {
               </h3>
               {data.claimed.map((p) => (
                 <div key={p.id} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: "13px 15px", marginBottom: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{p.store_name}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>
+                      {p.store_name}
+                      <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999, marginRight: 6,
+                        color: p.kind === "credit" ? "#0F6E56" : C.gold,
+                        background: p.kind === "credit" ? "rgba(25,195,156,0.14)" : C.goldSoft }}>
+                        {p.kind === "credit" ? `رصيد ${p.credit_value} ريال` : "كوبون خصم"}
+                      </span>
+                    </span>
                     <span style={{ color: C.gold, fontWeight: 800, fontSize: 12.5 }}>{p.discount_text}</span>
                   </div>
                   <div style={{ color: C.muted, fontSize: 11.5, marginTop: 2 }}>عن {matchLabel(p.match_id)}</div>
