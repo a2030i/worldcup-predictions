@@ -139,69 +139,93 @@ function AnnounceComposer() {
   );
 }
 
-/* وحدة التحكم الحي: الأدمن يُدخل الأهداف لحظيًا فتصل للجميع بثوانٍ مع قوووول */
-function LiveConsole({ matches, onChanged }) {
-  const [busy, setBusy] = useState("");
+/* وحدة التحكم الحي: زر «هدف» كبير لكل فريق — يصل للجميع بثوانٍ مع قوووول.
+   بمجرد لمس الأدمن للمباراة تصبح يدوية: المزامنة لا تلمسها (لا تعارض) */
+function LiveMatch({ r, onChanged }) {
+  const [, a, b] = r.id.split("_");
+  // حالة تفاؤلية فورية فوق رقم الخادم (لا ننتظر دورة التحديث)
+  const [local, setLocal] = useState({ h: r.live_h, a: r.live_a });
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  useEffect(() => { setLocal({ h: r.live_h, a: r.live_a }); }, [r.live_h, r.live_a]);
+  const h = local.h ?? 0, av = local.a ?? 0;
+
+  const goal = async (side) => {
+    if (busy) return;
+    const next = side === "a" ? { h: Math.min(h + 1, 30), a: av }
+      : side === "b" ? { h, a: Math.min(av + 1, 30) }
+      : side === "a-" ? { h: Math.max(h - 1, 0), a: av }
+      : { h, a: Math.max(av - 1, 0) };
+    setLocal(next); setBusy(true); setMsg("");
+    try { await adminLiveGoal(r.id, side); onChanged?.(); }
+    catch (e) { setMsg(e.message); setLocal({ h: r.live_h, a: r.live_a }); }
+    setBusy(false);
+  };
+
+  const goalBtn = (side, team) => (
+    <button onClick={() => goal(side)} disabled={busy} style={{
+      flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 900, fontSize: 14,
+      padding: "13px 8px", borderRadius: 12, border: "none", color: "#FFFFFF",
+      background: "#E0432F", opacity: busy ? 0.6 : 1, lineHeight: 1.3,
+    }}>هدف لـ{NAMES[team]} <span style={{ fontSize: 18 }}>+</span></button>
+  );
+  const minus = (side) => (
+    <button onClick={() => goal(side)} aria-label="تراجع" style={{
+      ...ghost, padding: "6px 12px", fontSize: 15, fontWeight: 900,
+    }}>−</button>
+  );
+
+  return (
+    <div style={{ padding: "14px 0", borderBottom: `1px solid ${C.line}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 10 }}>
+        <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{NAMES[a]}</span>
+        <span className="num" style={{ fontWeight: 900, fontSize: 26, color: "#E0432F", letterSpacing: 2 }}>{h} – {av}</span>
+        <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{NAMES[b]}</span>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {goalBtn("a", a)}
+        {goalBtn("b", b)}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ color: C.muted, fontSize: 11 }}>تراجع:</span>
+          {minus("a-")} {minus("b-")}
+          {r.live_manual && (
+            <span style={{ color: "#0F6E56", fontSize: 10.5, fontWeight: 800, background: "rgba(25,195,156,0.14)", padding: "3px 9px", borderRadius: 999 }}>
+              تحكم يدوي — المزامنة متوقفة هنا
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {r.live_manual && (
+            <button onClick={async () => {
+              try { await adminReleaseLive(r.id); setMsg("أُعيدت للمزامنة التلقائية ✓"); onChanged?.(); } catch (e) { setMsg(e.message); }
+            }} style={{ ...ghost, padding: "6px 11px", fontSize: 11 }}>إرجاع للتلقائي</button>
+          )}
+          <ConfirmButton label="إنهاء واعتماد" confirmLabel="تأكيد الاعتماد؟" style={{ ...gold, padding: "7px 14px", fontSize: 12 }}
+            onConfirm={async () => {
+              try { await adminFinishLive(r.id); setMsg("اعتُمدت النتيجة ✓ — احتُسبت النقاط والجوائز"); onChanged?.(); }
+              catch (e) { setMsg(e.message); }
+            }} />
+        </div>
+      </div>
+      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12, textAlign: "center", fontWeight: 700, margin: "8px 0 0" }}>{msg}</p>}
+    </div>
+  );
+}
+
+function LiveConsole({ matches, onChanged }) {
   // المباريات التي انطلقت ولم تُعتمد بعد (المرشحة للتحكم الحي)
   const live = (matches || []).filter((r) =>
     r.status === "scheduled" && new Date(r.kickoff_at) <= new Date());
   if (live.length === 0) return null;
-
-  const bump = async (r, dh, da) => {
-    const h = Math.max(0, (r.live_h ?? 0) + dh);
-    const a = Math.max(0, (r.live_a ?? 0) + da);
-    setBusy(r.id);
-    try { await adminSetLive(r.id, h, a); onChanged?.(); } catch (e) { setMsg(e.message); }
-    setBusy("");
-  };
-
-  const stepper = (label, onMinus, onPlus, val) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button onClick={onMinus} style={{ ...ghost, padding: "4px 11px", fontSize: 16, fontWeight: 900 }}>−</button>
-      <span className="num" style={{ minWidth: 22, textAlign: "center", fontWeight: 900, fontSize: 18, color: C.text }}>{val}</span>
-      <button onClick={onPlus} style={{ ...gold, padding: "4px 11px", fontSize: 16, fontWeight: 900 }}>+</button>
-    </div>
-  );
-
   return (
     <Card title="التحكم المباشر بالنتيجة (أثناء المباراة)">
-      <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.7 }}>
-        تشاهد المباراة؟ أدخِل كل هدف فور حدوثه ليصل لكل الأعضاء خلال ثوانٍ مع تأثير «قوووول». المزامنة التلقائية تبقى احتياطًا.
+      <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 6px", lineHeight: 1.7 }}>
+        تشاهد المباراة؟ اضغط «هدف» فور حدوثه ليصل لكل الأعضاء خلال ثوانٍ مع تأثير «قوووول».
+        بمجرد أول هدف تُسجّله تتوقف المزامنة التلقائية عن هذه المباراة فلا يتضاعف أي هدف.
       </p>
-      {live.map((r) => {
-        const [, a, b] = r.id.split("_");
-        return (
-          <div key={r.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.line}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: C.text, fontWeight: 800, fontSize: 13.5 }}>{NAMES[a]}</span>
-                {stepper(a, () => bump(r, -1, 0), () => bump(r, 1, 0), r.live_h ?? 0)}
-              </div>
-              <span style={{ color: C.muted, fontWeight: 800 }}>×</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {stepper(b, () => bump(r, 0, -1), () => bump(r, 0, 1), r.live_a ?? 0)}
-                <span style={{ color: C.text, fontWeight: 800, fontSize: 13.5 }}>{NAMES[b]}</span>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {r.live_h != null && (
-                <span style={{ color: C.red, fontSize: 11.5, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ animation: "pulse 1.6s infinite" }}>●</span> مباشر {r.live_h}–{r.live_a}
-                </span>
-              )}
-              <ConfirmButton label="إنهاء واعتماد النتيجة" confirmLabel="تأكيد الاعتماد النهائي؟" style={{ ...gold, padding: "7px 14px", fontSize: 12 }}
-                onConfirm={async () => {
-                  setBusy(r.id);
-                  try { await adminFinishLive(r.id); setMsg("اعتُمدت النتيجة ✓ — احتُسبت النقاط والجوائز"); onChanged?.(); }
-                  catch (e) { setMsg(e.message); }
-                  setBusy("");
-                }} />
-            </div>
-          </div>
-        );
-      })}
-      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12.5, textAlign: "center", fontWeight: 700, margin: "8px 0 0" }}>{msg}</p>}
+      {live.map((r) => <LiveMatch key={r.id} r={r} onChanged={onChanged} />)}
     </Card>
   );
 }

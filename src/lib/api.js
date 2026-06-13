@@ -127,7 +127,9 @@ export const adminCancelMatch = (matchId) =>
   rpc("admin_cancel_match", { p_token: tok(), p_match_id: matchId });
 export const adminMatchStats = (matchId) => rpc("admin_match_stats", { p_token: tok(), p_match_id: matchId });
 export const adminSetLive    = (matchId, h, a) => rpc("admin_set_live", { p_token: tok(), p_match_id: matchId, p_h: h, p_a: a });
+export const adminLiveGoal    = (matchId, side) => rpc("admin_live_goal", { p_token: tok(), p_match_id: matchId, p_side: side });
 export const adminFinishLive  = (matchId) => rpc("admin_finish_live", { p_token: tok(), p_match_id: matchId });
+export const adminReleaseLive = (matchId) => rpc("admin_release_live", { p_token: tok(), p_match_id: matchId });
 
 // ── الأدمن: الأعضاء ──
 export const adminOverview   = () => rpc("admin_overview", { p_token: tok() });
