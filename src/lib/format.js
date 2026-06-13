@@ -48,13 +48,10 @@ export function deviceTZ() {
 // التفضيل المحفوظ: "Asia/Riyadh" (مكة) أو منطقة جهاز العضو
 export const getTZ = () => localStorage.getItem(TZ_KEY) || MECCA_TZ;
 export const setTZ = (tz) => localStorage.setItem(TZ_KEY, tz);
-// هل توقيت الجهاز يختلف فعلًا عن مكة؟ (نُظهر الخيار فقط حينها)
+// هل جهاز العضو خارج توقيت السعودية؟ (نُظهر خيار التوقيت حينها)
+// بالاسم لا بفرق الساعة — ليظهر حتى لعضو في بلد على +3 مثل العراق/الأردن
 export function tzDiffersFromMecca() {
-  const dev = deviceTZ();
-  if (dev === MECCA_TZ) return false;
-  const now = new Date();
-  const off = (z) => new Intl.DateTimeFormat("en-US", { timeZone: z, hour: "2-digit", hour12: false }).format(now);
-  return off(dev) !== off(MECCA_TZ);
+  return deviceTZ() !== MECCA_TZ;
 }
 // اسم عربي مختصر للمنطقة (آخر جزء من المعرّف)
 export const tzLabel = (tz) => (tz === MECCA_TZ ? "مكة" : (tz.split("/").pop() || tz).replace(/_/g, " "));
