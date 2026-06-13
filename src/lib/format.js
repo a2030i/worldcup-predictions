@@ -13,6 +13,18 @@ export const digitsOnly = (s) => toEnDigits(s).replace(/\D/g, "");
 export const countWord = (n, one, two, few) =>
   n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${one.split(" ")[0]}`;
 
+// دقيقة المباراة التقريبية محسوبة من الانطلاق (المزود المجاني لا يعطيها)
+// تقدير: شوط أول 0-45، استراحة ~15د، شوط ثانٍ يكمل لـ90، ثم 90+
+// مُزامن بوقت الخادم (clockOffset) فلا يتأثر بساعة الجهاز
+export function liveMinuteLabel(kickoffISO, clockOffset = 0) {
+  const elapsed = (Date.now() + clockOffset - new Date(kickoffISO).getTime()) / 60000;
+  if (elapsed < 0) return null;
+  if (elapsed < 47) return `د ${Math.max(1, Math.ceil(elapsed))}`;
+  if (elapsed < 62) return "الاستراحة";
+  if (elapsed < 107) return `د ${Math.ceil(elapsed - 15)}`;
+  return "د 90+";
+}
+
 // نظام النقاط المعتمد: التوقع الصحيح = النتيجة بالضبط، والنقاط حسب المرحلة
 export const STAGE_POINTS = { group: 2, r32: 4, r16: 6, qf: 8, sf: 10, tp: 10, f: 20 };
 export const STAGE_NAMES = {

@@ -10,7 +10,7 @@ import {
   adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats, adminAddCodes,
   adminSetLive, adminFinishLive,
 } from "../lib/api";
-import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints } from "../lib/format";
+import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints, liveMinuteLabel } from "../lib/format";
 import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
 
 const ClockIconSmall = () => <ClockIcon size={14} />;
@@ -147,8 +147,11 @@ function LiveMatch({ r, onChanged }) {
   const [local, setLocal] = useState({ h: r.live_h, a: r.live_a });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [, setTick] = useState(0);
   useEffect(() => { setLocal({ h: r.live_h, a: r.live_a }); }, [r.live_h, r.live_a]);
+  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 20_000); return () => clearInterval(t); }, []);
   const h = local.h ?? 0, av = local.a ?? 0;
+  const minuteLabel = liveMinuteLabel(r.kickoff_at);
 
   const goal = async (side) => {
     if (busy) return;
@@ -177,11 +180,16 @@ function LiveMatch({ r, onChanged }) {
 
   return (
     <div style={{ padding: "14px 0", borderBottom: `1px solid ${C.line}` }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 4 }}>
         <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{NAMES[a]}</span>
         <span className="num" style={{ fontWeight: 900, fontSize: 26, color: "#E0432F", letterSpacing: 2 }}>{h} – {av}</span>
         <span style={{ color: C.text, fontWeight: 800, fontSize: 14 }}>{NAMES[b]}</span>
       </div>
+      {minuteLabel && (
+        <div style={{ textAlign: "center", color: C.red, fontSize: 11.5, fontWeight: 800, marginBottom: 8 }}>
+          <span style={{ animation: "pulse 1.6s infinite" }}>●</span> مباشر · {minuteLabel}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8 }}>
         {goalBtn("a", a)}
         {goalBtn("b", b)}

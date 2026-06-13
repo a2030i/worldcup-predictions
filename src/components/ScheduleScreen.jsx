@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, matchId, kickoffISO } from "../data/tournament";
 import { submitPrediction, getSession } from "../lib/api";
-import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints,
+import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, liveMinuteLabel,
   tzParts, getTZ, setTZ, MECCA_TZ, deviceTZ, tzDiffersFromMecca, tzLabel } from "../lib/format";
 import { generateShareCard, shareBlob } from "../lib/shareCard";
 import { LockIcon, ClockIcon, UsersIcon, PinIcon, TrophyIcon, ShareIcon } from "../icons.jsx";
@@ -322,6 +322,15 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksaWon = fin && ksa &&
     ((m.a === "SA" && state.result_h > state.result_a) || (m.b === "SA" && state.result_a > state.result_h));
 
+  // مؤقّت دقيقة المباراة الحية (يُعاد الحساب كل 20 ثانية أثناء البث)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => setTick((n) => n + 1), 20_000);
+    return () => clearInterval(t);
+  }, [live]);
+  const minuteLabel = live ? liveMinuteLabel(state?.kickoff_at || m.kickoff, clockOffset) : null;
+
   // كشف الهدف: ارتفاع النتيجة الحية بين تحديثين ← احتفال 12 ثانية + قوووول 4 ثوانٍ
   const [goal, setGoal] = useState(null);   // 'a' | 'b' | 'both'
   const [shout, setShout] = useState(false); // «قوووول!» عبر الشاشة
@@ -400,8 +409,8 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
             <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 10px",
                 borderRadius: 999, color: C.red, background: "rgba(255,107,107,0.13)",
-                border: "1px solid rgba(255,107,107,0.35)", animation: "pulse 1.6s infinite" }}>
-                ● مباشر الآن
+                border: "1px solid rgba(255,107,107,0.35)" }}>
+                <span style={{ animation: "pulse 1.6s infinite" }}>●</span> مباشر{minuteLabel ? ` · ${minuteLabel}` : ""}
               </span>
               {goal && (
                 <span style={{ fontSize: 12, fontWeight: 900, padding: "3px 12px", borderRadius: 999,
