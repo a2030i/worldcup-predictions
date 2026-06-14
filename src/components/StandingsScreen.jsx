@@ -3,7 +3,74 @@ import { C } from "../theme";
 import { NAMES, GROUPS, flag } from "../data/tournament";
 import { dayStars } from "../lib/api";
 import { countWord } from "../lib/format";
-import { TrophyIcon } from "../icons.jsx";
+import { generatePrizeCard, shareBlob, PRIZES } from "../lib/shareCard";
+import { TrophyIcon, ShareIcon } from "../icons.jsx";
+
+/* جوائز التحدي النقدية + بطاقة طولية للمشاركة على سناب/ستوري */
+function PrizeBanner() {
+  const [open, setOpen] = useState(false);   // لوحة المشاركة
+  const [preview, setPreview] = useState(null); // { url, blob }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const make = async () => {
+    if (busy) return;
+    setOpen(true); setBusy(true); setErr("");
+    try {
+      const blob = await generatePrizeCard();
+      setPreview((p) => { if (p) URL.revokeObjectURL(p.url); return { url: URL.createObjectURL(blob), blob }; });
+    } catch { setErr("تعذر إنشاء البطاقة"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="block" style={{ background: C.card, border: "1px solid rgba(224,67,47,0.4)", borderRadius: 18, padding: "16px 16px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ color: "#E0432F" }}><TrophyIcon size={18} /></span>
+        <span style={{ color: C.text, fontWeight: 900, fontSize: 15.5 }}>جوائز التحدي</span>
+        <span className="num" style={{ marginInlineStart: "auto", color: "#FFFFFF", background: "#E0432F",
+          fontWeight: 900, fontSize: 13, padding: "5px 12px", borderRadius: 999 }}>{PRIZES.total} ريال</span>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {PRIZES.places.map((p) => (
+          <div key={p.rank} style={{ flex: 1, background: "#F3EFE4", border: `1px solid ${C.line}`, borderRadius: 14, padding: "11px 8px", textAlign: "center" }}>
+            <span className="num" style={{ width: 26, height: 26, borderRadius: 999, display: "inline-flex", alignItems: "center",
+              justifyContent: "center", fontWeight: 900, fontSize: 13, color: "#1A2040", background: p.color }}>{p.rank}</span>
+            <div style={{ color: C.muted, fontSize: 11.5, fontWeight: 700, margin: "6px 0 2px" }}>{p.label}</div>
+            <div className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 16 }}>{p.amount} ريال</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={make} style={{
+        width: "100%", marginTop: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13.5,
+        padding: "11px 0", borderRadius: 12, border: "none", color: "#FFFFFF", background: "#E0432F",
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+      }}><ShareIcon size={15} /> شارك جوائز التحدي على سناب</button>
+
+      {open && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`, textAlign: "center" }}>
+          {busy && <p style={{ color: C.muted, fontSize: 12.5, margin: 0 }}>جاري تجهيز البطاقة...</p>}
+          {err && <p style={{ color: C.red, fontSize: 12.5, margin: 0 }}>{err}</p>}
+          {preview && !busy && (
+            <>
+              <img src={preview.url} alt="بطاقة جوائز التحدي" style={{ width: 165, borderRadius: 14,
+                border: `1px solid ${C.line}`, display: "inline-block" }} />
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
+                <button onClick={() => shareBlob(preview.blob, "جوائز-التحدي.png")} style={{
+                  cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13, padding: "10px 18px",
+                  borderRadius: 10, border: "none", color: "#FFFFFF", background: "#E0432F",
+                  display: "inline-flex", alignItems: "center", gap: 6 }}><ShareIcon size={14} /> مشاركة / حفظ</button>
+                <button onClick={() => setOpen(false)} style={{
+                  cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13, padding: "10px 14px",
+                  borderRadius: 10, border: `1px solid ${C.line}`, color: C.muted, background: "transparent" }}>إغلاق</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* نجوم آخر يوم لُعبت فيه مباريات — لجوائز اليوم وروح المنافسة */
 function DayStars() {
@@ -64,6 +131,7 @@ export default function StandingsScreen({ matches }) {
 
   return (
     <>
+      <PrizeBanner />
       <DayStars />
       <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: "0 0 4px", lineHeight: 1.8 }}>
         <span style={{ color: C.green }}>●</span> أول منتخبين يتأهلان مباشرة (+ أفضل 8 من أصحاب المركز الثالث)
