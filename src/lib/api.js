@@ -88,6 +88,9 @@ export const submitPrediction = (matchId, h, a, qualified = null) =>
   rpc("submit_prediction", { p_token: tok(), p_match_id: matchId, p_h: h, p_a: a, p_qualified: qualified });
 export const matchPredictions = (challengeId, matchId) =>
   rpc("match_predictions", { p_token: tok(), p_challenge_id: challengeId, p_match_id: matchId });
+// توزيع توقعات الجمهور (يظهر بعد القفل فقط)
+export const matchDistribution = (matchId) =>
+  rpc("match_distribution", { p_token: tok(), p_match_id: matchId });
 
 // ── التحديات ──
 export const PUBLIC_CHALLENGE_ID = "00000000-0000-0000-0000-000000000001";

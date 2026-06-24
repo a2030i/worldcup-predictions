@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, matchId, kickoffISO } from "../data/tournament";
-import { submitPrediction, getSession } from "../lib/api";
+import { submitPrediction, getSession, matchDistribution } from "../lib/api";
 import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, liveMinuteLabel,
   tzParts, getTZ, setTZ, MECCA_TZ, deviceTZ, tzDiffersFromMecca, tzLabel } from "../lib/format";
 import { generateShareCard, shareBlob } from "../lib/shareCard";
@@ -40,6 +40,23 @@ const numStyle = {
 const isExact = (st) => st?.my_h != null && st.my_h === st.result_h && st.my_a === st.result_a;
 
 /* ───── شريط الحماس: حققت / فاتك / متبقي حتى النهائي ───── */
+// سلسلة الإصابات: أطول/أحدث تتابع لتوقعات صحيحة (تُحسب من المباريات المنتهية المتوقَّعة)
+function streakStats(matches) {
+  const preds = (matches || [])
+    .filter((m) => m.status === "finished" && m.my_h != null)
+    .sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
+  let best = 0, run = 0;
+  preds.forEach((m) => {
+    if (m.my_h === m.result_h && m.my_a === m.result_a) { run++; best = Math.max(best, run); } else run = 0;
+  });
+  let cur = 0;
+  for (let i = preds.length - 1; i >= 0; i--) {
+    const m = preds[i];
+    if (m.my_h === m.result_h && m.my_a === m.result_a) cur++; else break;
+  }
+  return { cur, best };
+}
+
 function ProgressStrip({ matches }) {
   if (!matches?.length) return null;
   let achieved = 0, lost = 0, remaining = 0;
@@ -51,11 +68,20 @@ function ProgressStrip({ matches }) {
   });
   const total = achieved + lost + remaining;
   if (!total) return null;
+  const { cur, best } = streakStats(matches);
   const pct = (v) => `${(v / total) * 100}%`;
   return (
     <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 16, padding: "12px 14px", margin: "12px 0 4px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ color: C.text, fontWeight: 800, fontSize: 13 }}>رحلتك نحو النهائي</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+        <span style={{ color: C.text, fontWeight: 800, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          رحلتك نحو النهائي
+          {cur >= 2 && (
+            <span className="num" title="توقعات صحيحة متتالية" style={{ color: "#C2331F", background: "rgba(224,67,47,0.12)",
+              border: "1px solid rgba(224,67,47,0.3)", fontWeight: 900, fontSize: 11.5, padding: "2px 9px", borderRadius: 999 }}>
+              🔥 {cur} متتالية
+            </span>
+          )}
+        </span>
         <span className="num" style={{ color: C.gold, fontWeight: 900, fontSize: 15 }}>{achieved} <span style={{ fontSize: 11, fontWeight: 700 }}>نقطة</span></span>
       </div>
       <div style={{ display: "flex", height: 8, borderRadius: 999, overflow: "hidden", background: "#F3EFE4" }}>
@@ -69,6 +95,7 @@ function ProgressStrip({ matches }) {
         <span style={{ color: KSA_GREEN }}>متبقٍ {countWord(remaining, "نقطة واحدة", "نقطتين", "نقاط")} متاحة</span>
       </div>
       <div style={{ color: C.muted, fontSize: 10.5, marginTop: 6, textAlign: "center", opacity: 0.85 }}>
+        {best >= 2 && <span style={{ color: "#C2331F", fontWeight: 800 }}>أطول سلسلة إصابات: {best} 🔥 · </span>}
         النهائي وحده يساوي 4 نقاط — لا أحد محسوم قبل النهاية
       </div>
     </div>
@@ -348,6 +375,72 @@ function Team({ code, goals, lead, flash }) {
   );
 }
 
+/* توزيع توقعات الجمهور — يظهر بعد القفل فقط (يُحمَّل عند الطلب) */
+function Distribution({ m }) {
+  const [open, setOpen] = useState(false);
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (d || busy) return;
+    setBusy(true); setErr("");
+    try { setD(await matchDistribution(m.id)); } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const total = d?.total || 0;
+  const segs = d ? [
+    { label: `فوز ${NAMES[m.a] || m.a}`, count: d.home, color: "#2B6BE4" },
+    { label: "تعادل", count: d.draw, color: "#B8771A" },
+    { label: `فوز ${NAMES[m.b] || m.b}`, count: d.away, color: "#19C39C" },
+  ].map((s) => ({ ...s, p: total ? Math.round((s.count / total) * 100) : 0 })) : [];
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button onClick={toggle} style={{
+        width: "100%", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12,
+        padding: "8px 12px", borderRadius: 10, border: `1px solid ${C.line}`, background: C.card, color: C.muted,
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+      }}><UsersIcon size={13} /> توزيع توقعات الجمهور {open ? "▴" : "▾"}</button>
+      {open && (
+        <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "#F3EFE4", border: `1px solid ${C.line}` }}>
+          {busy && <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: 0 }}>جاري التحميل...</p>}
+          {err && <p style={{ color: C.red, fontSize: 12, textAlign: "center", margin: 0 }}>{err}</p>}
+          {d && total === 0 && <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: 0 }}>لا توقعات على هذه المباراة</p>}
+          {d && total > 0 && (
+            <>
+              <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "#E8E2D2" }}>
+                {segs.map((s) => s.count > 0 && <span key={s.label} style={{ width: `${s.p}%`, background: s.color }} />)}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, gap: 6, flexWrap: "wrap", fontSize: 11, fontWeight: 700 }}>
+                {segs.map((s) => (
+                  <span key={s.label} className="num" style={{ color: s.color }}>{s.label}: {s.p}%</span>
+                ))}
+              </div>
+              {d.top?.length > 0 && (
+                <div style={{ color: C.muted, fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>
+                  أكثر النتائج توقعًا:{" "}
+                  {d.top.map((t, i) => (
+                    <span key={i} className="num" style={{ fontWeight: 800, color: C.text }}>
+                      <span dir="ltr">{t.h}–{t.a}</span> ({t.c}){i < d.top.length - 1 ? " · " : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ color: C.muted, fontSize: 10.5, marginTop: 6, textAlign: "center", opacity: 0.85 }}>
+                بناءً على {countWord(total, "توقع واحد", "توقعان", "توقعات")}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksa = m.a === "SA" || m.b === "SA";
   const fin = state?.status === "finished";
@@ -459,6 +552,9 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
         </div>
       </div>
       <PredictionBox m={m} state={state} onChanged={onChanged} clockOffset={clockOffset} />
+      {m.a && m.b && (fin || (state?.locks_at && new Date(state.locks_at) <= new Date(Date.now() + clockOffset))) && (
+        <Distribution m={m} />
+      )}
     </div>
   );
 }
