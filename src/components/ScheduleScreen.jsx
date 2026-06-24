@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { C } from "../theme";
 import { NAMES, ARAB, SCHEDULE, flag, matchId, kickoffISO } from "../data/tournament";
-import { submitPrediction, getSession, matchDistribution } from "../lib/api";
+import { submitPrediction, getSession, matchDistribution, setJoker } from "../lib/api";
 import { digitsOnly, countWord, STAGE_POINTS, STAGE_NAMES, stagePoints, liveMinuteLabel,
   tzParts, getTZ, setTZ, MECCA_TZ, deviceTZ, tzDiffersFromMecca, tzLabel } from "../lib/format";
 import { generateShareCard, shareBlob } from "../lib/shareCard";
@@ -63,7 +63,7 @@ function ProgressStrip({ matches }) {
   matches.forEach((m) => {
     if (m.status === "cancelled") return;
     const pts = stagePoints(m.stage);
-    if (m.status === "finished") { if (isExact(m)) achieved += pts; else lost += pts; }
+    if (m.status === "finished") { if (isExact(m)) achieved += pts * (m.my_joker ? 2 : 1); else lost += pts; }
     else remaining += pts;
   });
   const total = achieved + lost + remaining;
@@ -130,6 +130,7 @@ function RulesCard() {
             • التوقع الصحيح = <b style={{ color: C.text }}>النتيجة بالضبط</b> (توقعت 2–1 وانتهت 2–1) — وتأخذ نقاط مرحلتها كاملة، وأي نتيجة أخرى صفر.<br />
             • التوقعات <b style={{ color: C.text }}>تُقفل عند انطلاق المباراة بتوقيت مكة</b> — وبعد القفل لا يمكن التعديل أبدًا، وتغيير ساعة جهازك لا يفيد.<br />
             • يمكنك تعديل توقعك بحرية قبل انطلاق المباراة، ويُسجَّل وقت آخر تعديل.<br />
+            • <b style={{ color: "#7C3AED" }}>الجوكر 🃏</b>: لك <b style={{ color: C.text }}>جوكر واحد كل يوم</b> — فعّله على توقع مباراة قبل قفلها فتتضاعف نقاطها (×2) إن أصبت النتيجة.<br />
             • عند تساوي النقاط: <b style={{ color: C.text }}>الأسبق في تسجيل توقعاته الصحيحة يتقدم</b> — حتى لو بفارق ثوانٍ، وأوقات الجميع معروضة بعد القفل للمصداقية.
           </div>
         </div>
@@ -234,11 +235,18 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   if (finished) {
     if (!saved) return <Note muted>لم تتوقع هذه المباراة</Note>;
     const exact = isExact(state);
+    const jk = state.my_joker;
+    const earned = pts * (jk ? 2 : 1);
     return (
       <Note gold={exact}>
         <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
-          <MyPick m={m} h={state.my_h} a={state.my_a} />
-          <span>{exact ? `توقع صحيح ✓ — كسبت ${countWord(pts, "نقطة", "نقطتين", "نقاط")}` : "لم يطابق النتيجة — بدون نقاط"}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+            <MyPick m={m} h={state.my_h} a={state.my_a} />
+            {jk && <JokerChip />}
+          </span>
+          <span>{exact
+            ? `توقع صحيح ✓ — كسبت ${countWord(earned, "نقطة", "نقطتين", "نقاط")}${jk ? " (مضاعفة بالجوكر)" : ""}`
+            : "لم يطابق النتيجة — بدون نقاط"}</span>
         </span>
       </Note>
     );
@@ -250,7 +258,10 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
         {saved ? (
           <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><LockIcon size={13} /> أُقفلت التوقعات — توقعك:</span>
-            <MyPick m={m} h={state.my_h} a={state.my_a} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+              <MyPick m={m} h={state.my_h} a={state.my_a} />
+              {state.my_joker && <JokerChip />}
+            </span>
           </span>
         ) : (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><LockIcon size={13} /> أُقفلت التوقعات — فاتك التوقع</span>
@@ -271,7 +282,16 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
     setBusy(false);
   };
 
+  const toggleJoker = async () => {
+    if (busy) return;
+    setBusy(true); setMsg("");
+    try { await setJoker(m.id, !state.my_joker); onChanged?.(); }
+    catch (e) { setMsg(e.message); }
+    setBusy(false);
+  };
+
   const readOnly = saved && !editing; // المحفوظ يُعرض مقفولًا حتى يضغط «تعديل التوقع»
+  const jk = state?.my_joker;
   const urgent = left < 60_000;
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(239,159,39,0.07)", border: `1px solid rgba(184,119,26,0.28)` }}>
@@ -293,18 +313,27 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.b]}</span>
       </div>
       {readOnly ? (
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button onClick={() => { setEditing(true); setMsg(""); setSharing(false); }} style={{
-            flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-            padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
-            border: "1px solid rgba(184,119,26,0.45)",
-          }}>تعديل التوقع</button>
-          <button onClick={() => setSharing(!sharing)} style={{
-            flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
-            padding: "11px 0", borderRadius: 10, color: "#FFFFFF", background: "#2B6BE4",
-            border: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-          }}><ShareIcon size={15} /> شارك توقعك</button>
-        </div>
+        <>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button onClick={() => { setEditing(true); setMsg(""); setSharing(false); }} style={{
+              flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+              padding: "11px 0", borderRadius: 10, color: C.gold, background: "transparent",
+              border: "1px solid rgba(184,119,26,0.45)",
+            }}>تعديل التوقع</button>
+            <button onClick={() => setSharing(!sharing)} style={{
+              flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
+              padding: "11px 0", borderRadius: 10, color: "#FFFFFF", background: "#2B6BE4",
+              border: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}><ShareIcon size={15} /> شارك توقعك</button>
+          </div>
+          <button onClick={toggleJoker} disabled={busy} title="جوكر واحد كل يوم — يضاعف نقاط هذا التوقع إن صحّ" style={{
+            width: "100%", marginTop: 8, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+            padding: "10px 0", borderRadius: 10, opacity: busy ? 0.6 : 1,
+            color: jk ? "#FFFFFF" : "#7C3AED", background: jk ? "#7C3AED" : "rgba(124,58,237,0.1)",
+            border: `1px solid ${jk ? "#7C3AED" : "rgba(124,58,237,0.4)"}`,
+            display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>🃏 {jk ? "الجوكر مُفعّل ×2 — اضغط للإلغاء" : "فعّل الجوكر (نقاط مضاعفة)"}</button>
+        </>
       ) : (
         <button onClick={save} disabled={busy} style={{
           width: "100%", marginTop: 10, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 14,
@@ -356,6 +385,11 @@ function MyPick({ m, h, a }) {
     </span>
   );
 }
+
+const JokerChip = () => (
+  <span className="num" style={{ color: "#7C3AED", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.35)",
+    fontWeight: 900, fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>🃏 جوكر ×2</span>
+);
 
 function Team({ code, goals, lead, flash }) {
   const tbd = !code; // خانة إقصائية لم يتحدد طرفها بعد

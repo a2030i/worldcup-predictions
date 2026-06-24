@@ -54,6 +54,7 @@ const ERRORS = {
   MATCH_EXISTS: "هذه المباراة مضافة مسبقًا",
   STAGE_INVALID: "اختر مرحلة صحيحة",
   TEAM_INVALID: "اختر منتخبين صحيحين",
+  JOKER_USED: "استخدمت جوكر اليوم على مباراة أُقفلت — لا يمكن نقله",
 };
 
 async function rpc(fn, args) {
@@ -86,6 +87,9 @@ export const changePin = (oldPin, newPin) =>
 export const getMatches = () => rpc("get_matches", { p_token: tok() });
 export const submitPrediction = (matchId, h, a, qualified = null) =>
   rpc("submit_prediction", { p_token: tok(), p_match_id: matchId, p_h: h, p_a: a, p_qualified: qualified });
+// الجوكر: مضاعفة نقاط مباراة واحدة في اليوم (قبل القفل)
+export const setJoker = (matchId, on = true) =>
+  rpc("set_joker", { p_token: tok(), p_match_id: matchId, p_on: on });
 export const matchPredictions = (challengeId, matchId) =>
   rpc("match_predictions", { p_token: tok(), p_challenge_id: challengeId, p_match_id: matchId });
 // توزيع توقعات الجمهور (يظهر بعد القفل فقط)
