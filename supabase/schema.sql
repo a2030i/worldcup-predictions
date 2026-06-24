@@ -160,9 +160,9 @@ begin
   return u;
 end $$;
 
--- ─────────────────── احتساب النقاط (قرار المالك 2026-06-12) ───────────────────
--- التوقع الصحيح = النتيجة بالضبط، ويأخذ نقاط مرحلته كاملة:
--- مجموعات 2 · دور32 4 · دور16 6 · ربع 8 · نصف 10 · المركز الثالث 10 · النهائي 20
+-- ─────────────────── احتساب النقاط (قرار المالك 2026-06-14) ───────────────────
+-- التوقع الصحيح = النتيجة بالضبط، ويأخذ نقاط مرحلته:
+-- كل المباريات 2 · نصف النهائي 3 · النهائي 4 (المركز الثالث مباراة عادية = 2)
 -- (عمود qualified خارج الاحتساب حاليًا)
 create or replace function wc.match_points(
   ph int, pa int, pq text, rh int, ra int, rq text, stage text
@@ -170,9 +170,7 @@ create or replace function wc.match_points(
   select case
     when rh is null or ra is null then 0
     when ph = rh and pa = ra then
-      case stage when 'group' then 2 when 'r32' then 4 when 'r16' then 6
-                 when 'qf' then 8 when 'sf' then 10 when 'tp' then 10
-                 when 'f' then 20 else 2 end
+      case stage when 'sf' then 3 when 'f' then 4 else 2 end
     else 0
   end
 $$;

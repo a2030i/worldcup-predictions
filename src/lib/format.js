@@ -26,7 +26,8 @@ export function liveMinuteLabel(kickoffISO, clockOffset = 0) {
 }
 
 // نظام النقاط المعتمد: التوقع الصحيح = النتيجة بالضبط، والنقاط حسب المرحلة
-export const STAGE_POINTS = { group: 2, r32: 4, r16: 6, qf: 8, sf: 10, tp: 10, f: 20 };
+// كل المباريات نقطتان · نصف النهائي 3 · النهائي 4 (المركز الثالث = 2)
+export const STAGE_POINTS = { group: 2, r32: 2, r16: 2, qf: 2, sf: 3, tp: 2, f: 4 };
 export const STAGE_NAMES = {
   group: "دور المجموعات", r32: "دور الـ32", r16: "دور الـ16",
   qf: "ربع النهائي", sf: "نصف النهائي", tp: "المركز الثالث", f: "النهائي",

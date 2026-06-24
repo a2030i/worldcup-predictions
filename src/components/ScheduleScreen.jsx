@@ -203,7 +203,10 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
     const exact = isExact(state);
     return (
       <Note gold={exact}>
-        توقعت {state.my_h}–{state.my_a} · {exact ? `+${pts} ${pts >= 3 ? "نقاط" : "نقطة"} — توقع صحيح!` : "بدون نقاط"}
+        <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+          <MyPick m={m} h={state.my_h} a={state.my_a} />
+          <span>{exact ? `توقع صحيح ✓ — كسبت ${countWord(pts, "نقطة", "نقطتين", "نقاط")}` : "لم يطابق النتيجة — بدون نقاط"}</span>
+        </span>
       </Note>
     );
   }
@@ -211,7 +214,14 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   if (locked)
     return (
       <Note muted>
-        <LockIcon size={13} /> أُقفلت التوقعات{saved ? ` · توقعك: ${state.my_h}–${state.my_a}` : " — فاتك التوقع"}
+        {saved ? (
+          <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><LockIcon size={13} /> أُقفلت التوقعات — توقعك:</span>
+            <MyPick m={m} h={state.my_h} a={state.my_a} />
+          </span>
+        ) : (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><LockIcon size={13} /> أُقفلت التوقعات — فاتك التوقع</span>
+        )}
       </Note>
     );
 
@@ -295,6 +305,24 @@ const Note = ({ children, muted, gold }) => (
     display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
   }}>{children}</div>
 );
+
+/* عرض توقعي بأسماء المنتخبين — كل رقم ملتصق بمنتخبه فلا يلتبس من سجّل ماذا */
+function MyPick({ m, h, a }) {
+  const cell = (code, goals) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <span style={{ fontSize: 15, lineHeight: 1 }}>{flag(code)}</span>
+      <span style={{ fontWeight: 700 }}>{NAMES[code] || code}</span>
+      <b className="num" style={{ fontSize: 15 }}>{goals}</b>
+    </span>
+  );
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+      {cell(m.a, h)}
+      <span style={{ opacity: 0.45 }}>·</span>
+      {cell(m.b, a)}
+    </span>
+  );
+}
 
 function Team({ code, goals, lead, flash }) {
   const strong = code === "SA" || lead;
@@ -524,7 +552,7 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
               {day.stage && day.stage !== "group" && (
                 <span style={{ color: "#B68CFF", fontSize: 11.5, fontWeight: 800, background: "rgba(124,58,237,0.14)",
                   border: "1px solid rgba(124,58,237,0.4)", padding: "4px 10px", borderRadius: 999 }}>
-                  {STAGE_NAMES[day.stage]} · {STAGE_POINTS[day.stage]} نقاط
+                  {STAGE_NAMES[day.stage]} · {countWord(STAGE_POINTS[day.stage], "نقطة", "نقطتان", "نقاط")}
                 </span>
               )}
               {isToday && <span style={{ color: C.gold, fontSize: 12, fontWeight: 800 }}>اليوم</span>}

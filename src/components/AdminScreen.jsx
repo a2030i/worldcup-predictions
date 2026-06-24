@@ -172,10 +172,10 @@ function LiveMatch({ r, onChanged }) {
       background: "#E0432F", opacity: busy ? 0.6 : 1, lineHeight: 1.3,
     }}>هدف لـ{NAMES[team]} <span style={{ fontSize: 18 }}>+</span></button>
   );
-  const minus = (side) => (
-    <button onClick={() => goal(side)} aria-label="تراجع" style={{
-      ...ghost, padding: "6px 12px", fontSize: 15, fontWeight: 900,
-    }}>−</button>
+  const minus = (side, team, disabled) => (
+    <button onClick={() => goal(side)} disabled={busy || disabled} aria-label={`إلغاء هدف لـ${NAMES[team]}`} style={{
+      ...ghost, padding: "6px 11px", fontSize: 12, fontWeight: 800, opacity: busy || disabled ? 0.45 : 1,
+    }}>− {NAMES[team]}</button>
   );
 
   return (
@@ -195,9 +195,9 @@ function LiveMatch({ r, onChanged }) {
         {goalBtn("b", b)}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <span style={{ color: C.muted, fontSize: 11 }}>تراجع:</span>
-          {minus("a-")} {minus("b-")}
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ color: C.muted, fontSize: 11 }}>إلغاء هدف (VAR):</span>
+          {minus("a-", a, h <= 0)} {minus("b-", b, av <= 0)}
           {r.live_manual && (
             <span style={{ color: "#0F6E56", fontSize: 10.5, fontWeight: 800, background: "rgba(25,195,156,0.14)", padding: "3px 9px", borderRadius: 999 }}>
               تحكم يدوي — المزامنة متوقفة هنا
@@ -448,7 +448,7 @@ function AddMatchForm({ onAdded, onErr }) {
       </select>
       <select value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...field, background: "#FFFFFF" }}>
         {Object.entries(STAGE_NAMES).filter(([s]) => s !== "group").map(([s, n]) => (
-          <option key={s} value={s}>{n} ({stagePoints(s)} نقاط)</option>
+          <option key={s} value={s}>{n} ({countWord(stagePoints(s), "نقطة", "نقطتان", "نقاط")})</option>
         ))}
       </select>
       <input type="datetime-local" value={kick} onChange={(e) => setKick(e.target.value)} style={{ ...field, colorScheme: "light" }} />
