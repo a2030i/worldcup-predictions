@@ -69,7 +69,7 @@ function ProgressStrip({ matches }) {
         <span style={{ color: KSA_GREEN }}>متبقٍ {countWord(remaining, "نقطة واحدة", "نقطتين", "نقاط")} متاحة</span>
       </div>
       <div style={{ color: C.muted, fontSize: 10.5, marginTop: 6, textAlign: "center", opacity: 0.85 }}>
-        النهائي وحده يساوي 20 نقطة — لا أحد محسوم قبل النهاية
+        النهائي وحده يساوي 4 نقاط — لا أحد محسوم قبل النهاية
       </div>
     </div>
   );
@@ -196,6 +196,12 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const locked = finished || left <= 0;
   const saved = state?.my_h != null;
   const pts = stagePoints(state?.stage || m.stage);
+
+  // خانة إقصائية لم يكتمل طرفاها بعد — لا تُفتح للتوقع حتى يُعرف المنتخبان
+  if (!m.a || !m.b)
+    return (
+      <Note muted><ClockIcon size={13} /> تُفتح التوقعات فور تحديد المنتخبين</Note>
+    );
 
   // نتيجة منتهية + كان عندي توقع → اعرض نقاطي عليها
   if (finished) {
@@ -325,12 +331,13 @@ function MyPick({ m, h, a }) {
 }
 
 function Team({ code, goals, lead, flash }) {
+  const tbd = !code; // خانة إقصائية لم يتحدد طرفها بعد
   const strong = code === "SA" || lead;
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <span style={{ fontSize: 22, lineHeight: 1 }}>{flag(code)}</span>
-        <span style={{ color: strong ? C.gold : C.text, fontSize: 16, fontWeight: strong ? 800 : 600 }}>{NAMES[code] || code}</span>
+        <span style={{ fontSize: 22, lineHeight: 1, opacity: tbd ? 0.4 : 1 }}>{tbd ? "🏳️" : flag(code)}</span>
+        <span style={{ color: tbd ? C.muted : strong ? C.gold : C.text, fontSize: 16, fontWeight: tbd ? 600 : strong ? 800 : 600, fontStyle: tbd ? "italic" : "normal" }}>{tbd ? "يُحدَّد لاحقًا" : NAMES[code] || code}</span>
       </div>
       {goals != null && (
         <span key={goals} className="num" style={{ color: lead ? C.gold : C.text, fontWeight: 800, fontSize: 17, minWidth: 22,
@@ -470,7 +477,11 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
         kickoff: kickoffISO(d.iso, m.t, m.p) })));
     const staticIds = new Set(list.map((m) => m.id));
     (matches || []).filter((r) => !staticIds.has(r.id) && r.status !== "cancelled").forEach((r) => {
-      const [, a, b] = r.id.split("_");
+      // المنتخبات من الخادم مباشرة (قد تكون null = خانة إقصائية بانتظار التأهل).
+      // التراجع لتفكيك المعرّف القديم {iso}_{a}_{b} فقط إن لم يُرجِع الخادمُ الحقلين بعد.
+      const [, sa, sb] = r.id.split("_");
+      const a = "team_a" in r ? r.team_a : sa;
+      const b = "team_b" in r ? r.team_b : sb;
       list.push({ id: r.id, a, b, stage: r.stage || "group", kickoff: r.kickoff_at });
     });
     return list;

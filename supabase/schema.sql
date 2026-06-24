@@ -267,6 +267,8 @@ begin
   u := wc._auth(p_token);
   select * into m from wc.matches where id = p_match_id;
   if m.id is null then raise exception 'MATCH_NOT_FOUND'; end if;
+  -- خانة إقصائية لم يكتمل طرفاها بعد: لا تُفتح للتوقع حتى يُعرف المنتخبان
+  if m.team_a is null or m.team_b is null then raise exception 'MATCH_NOT_OPEN'; end if;
   if m.status <> 'scheduled' then raise exception 'MATCH_NOT_OPEN'; end if;
   if now() >= wc.lock_at(m) then raise exception 'PREDICTIONS_LOCKED'; end if;
 
@@ -287,7 +289,7 @@ returns table (
   id text, status text, stage text, kickoff_at timestamptz, locks_at timestamptz,
   result_h int, result_a int, qualified text,
   my_h int, my_a int, my_qualified text, predictors bigint, server_now timestamptz,
-  live_h int, live_a int
+  live_h int, live_a int, team_a text, team_b text
 ) language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles;
 begin
@@ -297,7 +299,7 @@ begin
          m.result_h, m.result_a, m.qualified,
          p.h, p.a, p.qualified,
          (select count(*) from wc.predictions x where x.match_id = m.id),
-         now(), m.live_h, m.live_a
+         now(), m.live_h, m.live_a, m.team_a, m.team_b
   from wc.matches m
   left join wc.predictions p on p.match_id = m.id and p.user_id = u.id
   order by m.kickoff_at;
@@ -1024,6 +1026,46 @@ grant execute on function
   public.day_stars(uuid, date),
   public.admin_integrity_report(uuid),
   public.admin_add_match(uuid, text, text, timestamptz, text, text)
+to anon, authenticated;
+
+-- ═══════════ خانات الأدوار الإقصائية المسبقة (2026-06-14) ═══════════
+-- إنشاء مباريات دور الـ32 (وبقية الإقصائيات) كخانات بمعرّف ثابت قبل اكتمال
+-- طرفيها: المنتخب قد يكون فارغًا (يُحدَّد لاحقًا) فتظهر المباراة في الجدول
+-- «بانتظار التأهل» ولا تُفتح للتوقع إلا بعد تعيين المنتخبين (يُفرض في submit_prediction).
+-- ميزة المعرّف الثابت: تعيين المنتخب لاحقًا لا يغيّر المعرّف فلا تُفقد التوقعات.
+alter table wc.matches alter column team_a drop not null;
+alter table wc.matches alter column team_b drop not null;
+
+-- إنشاء/تحديث خانة مباراة بمعرّف ثابت — للأدمن. المنتخبان اختياريان (null = بانتظار
+-- التأهل). يُستدعى لإنشاء الخانة ثم لتعيين كل منتخب فور تأهله. لا يلمس نتيجة معتمدة.
+create or replace function public.admin_upsert_match(
+  p_token uuid, p_id text, p_stage text, p_kickoff timestamptz,
+  p_team_a text default null, p_team_b text default null, p_city text default null
+) returns json language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles; a text; b text;
+begin
+  u := wc._auth_admin(p_token);
+  if p_stage not in ('r32','r16','qf','sf','tp','f') then raise exception 'STAGE_INVALID'; end if;
+  if coalesce(trim(p_id), '') = '' then raise exception 'MATCH_NOT_FOUND'; end if;
+  a := nullif(trim(p_team_a), ''); b := nullif(trim(p_team_b), '');
+  if a is not null and not exists (select 1 from wc.team_map where code = a) then raise exception 'TEAM_INVALID'; end if;
+  if b is not null and not exists (select 1 from wc.team_map where code = b) then raise exception 'TEAM_INVALID'; end if;
+  if a is not null and a = b then raise exception 'TEAM_INVALID'; end if;
+  insert into wc.matches (id, team_a, team_b, kickoff_at, stage, city, status)
+  values (p_id, a, b, p_kickoff, p_stage, p_city, 'scheduled')
+  on conflict (id) do update set
+    team_a = excluded.team_a, team_b = excluded.team_b,
+    kickoff_at = excluded.kickoff_at, stage = excluded.stage,
+    city = coalesce(excluded.city, wc.matches.city)
+  where wc.matches.status <> 'finished';
+  insert into wc.audit_log (admin_id, action, details)
+  values (u.id, 'upsert_match',
+          json_build_object('id', p_id, 'a', a, 'b', b, 'stage', p_stage));
+  return json_build_object('ok', true);
+end $$;
+
+grant execute on function
+  public.admin_upsert_match(uuid, text, text, timestamptz, text, text, text)
 to anon, authenticated;
 
 -- ═══════════ نظام الجوائز: كوبونات المتاجر (2026-06-12) ═══════════

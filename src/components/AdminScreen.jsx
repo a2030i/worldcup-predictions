@@ -8,7 +8,7 @@ import {
   adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
   adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
   adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats, adminAddCodes,
-  adminSetLive, adminFinishLive,
+  adminSetLive, adminFinishLive, adminUpsertMatch,
 } from "../lib/api";
 import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints, liveMinuteLabel } from "../lib/format";
 import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
@@ -403,9 +403,13 @@ function MatchesTab({ matches, onChanged }) {
         )}
       </Card>
 
-      <Card title="إضافة مباراة (الأدوار الإقصائية)">
+      <Card title="إنشاء خانات الأدوار الإقصائية (دور الـ32 وما بعده)">
+        <BracketSlots matches={matches} onChanged={onChanged} />
+      </Card>
+
+      <Card title="إضافة مباراة جاهزة بطرفيها (احتياطي)">
         <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.7 }}>
-          المزامنة التلقائية تضيف مباريات الأدوار الإقصائية وحدها فور معرفة المتأهلين — هذا النموذج للاحتياط اليدوي.
+          المزامنة التلقائية تضيف مباريات الأدوار الإقصائية وحدها فور معرفة المتأهلين — هذا النموذج للإضافة الفورية بطرفين معروفين.
         </p>
         <AddMatchForm onAdded={(t) => { setMsg(t); onChanged?.(); }} onErr={setMsg} />
       </Card>
@@ -460,6 +464,99 @@ function AddMatchForm({ onAdded, onErr }) {
           onAdded("أُضيفت المباراة ✓ — ستظهر للأعضاء فورًا للتوقع");
         } catch (e) { onErr(e.message); }
       }}>إضافة</button>
+    </div>
+  );
+}
+
+const KO_STAGES = ["r32", "r16", "qf", "sf", "tp", "f"];
+// ISO timestamptz → نص datetime-local بتوقيت السعودية (للتعبئة في الحقل)
+const toKsaLocal = (iso) => new Date(new Date(iso).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 16);
+
+/* إنشاء خانات الأدوار الإقصائية بمعرّف ثابت قبل اكتمال طرفيها، وتعيين المنتخب فور
+   تأهله. المباراة تظهر للأعضاء «بانتظار التأهل» ولا تُفتح للتوقع إلا باكتمال الطرفين. */
+function BracketSlots({ matches, onChanged }) {
+  const [id, setId] = useState("");
+  const [stage, setStage] = useState("r32");
+  const [kick, setKick] = useState("");
+  const [city, setCity] = useState("");
+  const [ta, setTa] = useState(""); const [tb, setTb] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const slots = (matches || []).filter((r) => KO_STAGES.includes(r.stage))
+    .slice().sort((x, y) => new Date(x.kickoff_at) - new Date(y.kickoff_at));
+
+  const reset = () => { setId(""); setStage("r32"); setKick(""); setCity(""); setTa(""); setTb(""); };
+  const loadSlot = (r) => {
+    setId(r.id); setStage(r.stage); setKick(toKsaLocal(r.kickoff_at));
+    setTa(r.team_a || ""); setTb(r.team_b || ""); setCity(""); setMsg("");
+  };
+
+  const teamSel = { ...field, background: "#FFFFFF", minWidth: 120, flex: 1 };
+  const teamOptions = (
+    <>
+      <option value="">— بانتظار التأهل —</option>
+      {Object.entries(NAMES).map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+    </>
+  );
+
+  const save = async () => {
+    if (!id.trim() || !kick) { setMsg("أدخل معرّف الخانة والموعد"); return; }
+    if (ta && tb && ta === tb) { setMsg("لا يمكن أن يكون المنتخبان متطابقين"); return; }
+    try {
+      await adminUpsertMatch(id.trim(), stage, `${kick}:00+03:00`, ta || null, tb || null, city || null);
+      setMsg("حُفظت الخانة ✓"); onChanged?.();
+    } catch (e) { setMsg(e.message); }
+  };
+
+  return (
+    <div>
+      <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.8 }}>
+        أنشئ خانة المباراة بمعرّف ثابت (مثل <b style={{ color: C.text }}>R32-1</b>) وحدّد موعدها — واترك المنتخب
+        «بانتظار التأهل» إن لم يُعرف بعد. <b style={{ color: C.text }}>مع تأهل كل منتخب عيّنه بنفس المعرّف</b>،
+        ولن تُفتح التوقعات إلا باكتمال الطرفين. تثبيت المعرّف يحفظ توقعات الأعضاء عند تعيين المنتخبين.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="معرّف الخانة (R32-1)" style={{ ...field, width: 150 }} />
+        <select value={stage} onChange={(e) => setStage(e.target.value)} style={{ ...field, background: "#FFFFFF" }}>
+          {KO_STAGES.map((s) => <option key={s} value={s}>{STAGE_NAMES[s]} ({countWord(stagePoints(s), "نقطة", "نقطتان", "نقاط")})</option>)}
+        </select>
+        <input type="datetime-local" value={kick} onChange={(e) => setKick(e.target.value)} style={{ ...field, colorScheme: "light" }} />
+        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="المدينة (اختياري)" style={{ ...field, width: 130 }} />
+        <select value={ta} onChange={(e) => setTa(e.target.value)} style={teamSel}>{teamOptions}</select>
+        <span style={{ color: C.muted, fontWeight: 800 }}>×</span>
+        <select value={tb} onChange={(e) => setTb(e.target.value)} style={teamSel}>{teamOptions}</select>
+        <button style={gold} onClick={save}>حفظ الخانة</button>
+        {id && <button style={ghost} onClick={reset}>خانة جديدة</button>}
+      </div>
+      {msg && <p style={{ color: msg.includes("✓") ? C.green : C.red, fontSize: 12.5, textAlign: "center", fontWeight: 700, margin: "10px 0 0" }}>{msg}</p>}
+
+      {slots.length > 0 && (
+        <div style={{ marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+          <div style={{ color: C.muted, fontSize: 11.5, fontWeight: 800, marginBottom: 6 }}>الخانات المنشأة ({slots.length}) — اضغط للتعديل</div>
+          {slots.map((r) => {
+            const tbd = !r.team_a || !r.team_b;
+            const k = ksaParts(r.kickoff_at);
+            return (
+              <button key={r.id} onClick={() => loadSlot(r)} style={{
+                width: "100%", textAlign: "right", cursor: "pointer", fontFamily: "inherit",
+                display: "flex", alignItems: "center", gap: 8, padding: "8px 6px", flexWrap: "wrap",
+                background: id === r.id ? C.goldSoft : "transparent", border: "none",
+                borderBottom: `1px solid ${C.line}`, fontSize: 12.5, color: C.text,
+              }}>
+                <span className="num" style={{ fontWeight: 800, color: C.gold, minWidth: 56 }}>{r.id}</span>
+                <span style={{ flex: 1, minWidth: 120, fontWeight: 700 }}>
+                  {r.team_a ? NAMES[r.team_a] : "بانتظار التأهل"} × {r.team_b ? NAMES[r.team_b] : "بانتظار التأهل"}
+                </span>
+                <span style={{ color: C.muted, fontSize: 11 }}>{STAGE_NAMES[r.stage]} · {k.date} {k.t}{k.p}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, padding: "2px 9px", borderRadius: 999,
+                  color: tbd ? C.gold : "#0F6E56", background: tbd ? C.goldSoft : "rgba(25,195,156,0.14)" }}>
+                  {tbd ? "بانتظار التأهل" : "مكتملة"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

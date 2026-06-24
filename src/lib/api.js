@@ -158,3 +158,6 @@ export const adminClearAnnouncement = () => rpc("admin_clear_announcement", { p_
 export const adminIntegrityReport   = () => rpc("admin_integrity_report", { p_token: tok() });
 export const adminAddMatch = (teamA, teamB, kickoffISO, stage, city = null) =>
   rpc("admin_add_match", { p_token: tok(), p_team_a: teamA, p_team_b: teamB, p_kickoff: kickoffISO, p_stage: stage, p_city: city });
+// إنشاء/تحديث خانة إقصائية بمعرّف ثابت (المنتخبان اختياريان — null = بانتظار التأهل)
+export const adminUpsertMatch = (id, stage, kickoffISO, teamA = null, teamB = null, city = null) =>
+  rpc("admin_upsert_match", { p_token: tok(), p_id: id, p_stage: stage, p_kickoff: kickoffISO, p_team_a: teamA, p_team_b: teamB, p_city: city });

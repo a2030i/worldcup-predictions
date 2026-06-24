@@ -141,7 +141,7 @@ const SPECIAL = {
   ENG: String.fromCodePoint(0x1F3F4,0xE0067,0xE0062,0xE0065,0xE006E,0xE0067,0xE007F),
 };
 const flag = (cc) =>
-  SPECIAL[cc] || cc.toUpperCase().replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+  !cc ? "" : SPECIAL[cc] || cc.toUpperCase().replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
 
 const todayISO = () => {
   const d = new Date(); const p = (n) => String(n).padStart(2, "0");
