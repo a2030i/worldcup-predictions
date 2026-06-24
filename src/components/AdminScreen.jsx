@@ -403,7 +403,7 @@ function MatchesTab({ matches, onChanged }) {
         )}
       </Card>
 
-      <Card title="إنشاء خانات الأدوار الإقصائية (دور الـ32 وما بعده)">
+      <Card title="الأدوار الإقصائية — احتياطي يدوي (اختياري)">
         <BracketSlots matches={matches} onChanged={onChanged} />
       </Card>
 
@@ -510,10 +510,15 @@ function BracketSlots({ matches, onChanged }) {
 
   return (
     <div>
+      <div style={{ background: "rgba(25,195,156,0.1)", border: "1px solid rgba(25,195,156,0.35)",
+        borderRadius: 12, padding: "10px 12px", marginBottom: 12, color: "#0F6E56", fontSize: 12, fontWeight: 700, lineHeight: 1.8 }}>
+        ✅ مباريات الأدوار الإقصائية (الـ32 والـ16 والربع والنصف والنهائي) تُضاف <b>تلقائيًا</b> فور
+        تأكُّد المتأهلين، وتُفتح توقعاتها وحدها — لا حاجة لإنشاء شيء هنا.
+      </div>
       <p style={{ color: C.muted, fontSize: 11.5, margin: "0 0 10px", lineHeight: 1.8 }}>
-        أنشئ خانة المباراة بمعرّف ثابت (مثل <b style={{ color: C.text }}>R32-1</b>) وحدّد موعدها — واترك المنتخب
-        «بانتظار التأهل» إن لم يُعرف بعد. <b style={{ color: C.text }}>مع تأهل كل منتخب عيّنه بنفس المعرّف</b>،
-        ولن تُفتح التوقعات إلا باكتمال الطرفين. تثبيت المعرّف يحفظ توقعات الأعضاء عند تعيين المنتخبين.
+        استخدم هذا فقط <b style={{ color: C.text }}>للاحتياط</b> (لو تأخّر مزوّد النتائج أو احتجت تصحيحًا):
+        أنشئ خانة بمعرّف ثابت (مثل <b style={{ color: C.text }}>R32-1</b>) واترك المنتخب «بانتظار التأهل» إن لم يُعرف بعد،
+        ثم عيّنه بنفس المعرّف فور تأهله — تثبيت المعرّف يحفظ توقعات الأعضاء.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input value={id} onChange={(e) => setId(e.target.value)} placeholder="معرّف الخانة (R32-1)" style={{ ...field, width: 150 }} />
