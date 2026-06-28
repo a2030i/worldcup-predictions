@@ -8,7 +8,7 @@ import {
   adminChallengeBoard, adminMatchWinners, adminDeleteChallenge, adminAuditLog, adminSyncNow,
   adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
   adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats, adminAddCodes,
-  adminSetLive, adminFinishLive, adminUpsertMatch,
+  adminSetLive, adminFinishLive, adminUpsertMatch, adminSetPhase,
 } from "../lib/api";
 import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints, liveMinuteLabel } from "../lib/format";
 import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
@@ -188,6 +188,22 @@ function LiveMatch({ r, onChanged }) {
       {minuteLabel && (
         <div style={{ textAlign: "center", color: C.red, fontSize: 11.5, fontWeight: 800, marginBottom: 8 }}>
           <span style={{ animation: "pulse 1.6s infinite" }}>●</span> مباشر · {minuteLabel}
+        </div>
+      )}
+      {r.stage && r.stage !== "group" && (
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 8, flexWrap: "wrap" }}>
+          {[["", "وقت أصلي"], ["ET", "أشواط إضافية"], ["PENS", "ركلات ترجيح"]].map(([ph, label]) => {
+            const on = (r.live_phase || "") === ph;
+            return (
+              <button key={ph || "reg"} disabled={busy} onClick={async () => {
+                try { await adminSetPhase(r.id, ph || null); onChanged?.(); } catch (e) { setMsg(e.message); }
+              }} style={{
+                cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 11.5, padding: "6px 12px", borderRadius: 999,
+                border: `1px solid ${on ? "#7C3AED" : C.line}`, background: on ? "rgba(124,58,237,0.14)" : "transparent",
+                color: on ? "#7C3AED" : C.muted,
+              }}>{label}</button>
+            );
+          })}
         </div>
       )}
       <div style={{ display: "flex", gap: 8 }}>

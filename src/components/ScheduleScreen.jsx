@@ -239,6 +239,10 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
     const exact = isExact(state);
     const jk = state.my_joker;
     const earned = pts * (jk ? 2 : 1);
+    // المتأهل فعلًا: الفائز المخزّن، أو الأعلى نتيجةً إن كانت حاسمة (للحاسمة لا نحتاج تخزينًا)
+    const actualAdv = state.qualified
+      || (state.result_h != null && state.result_h !== state.result_a
+          ? (state.result_h > state.result_a ? m.a : m.b) : null);
     return (
       <Note gold={exact}>
         <span style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
@@ -249,10 +253,10 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
           <span>{exact
             ? `توقع صحيح ✓ — كسبت ${countWord(earned, "نقطة", "نقطتين", "نقاط")}${jk ? " (مضاعفة بالجوكر)" : ""}`
             : "لم يطابق النتيجة — بدون نقاط"}</span>
-          {isKnockout && (state.my_qualified || state.qualified) && (
+          {isKnockout && (state.my_qualified || actualAdv) && (
             <span style={{ fontSize: 11.5, color: C.muted }}>
               {state.my_qualified && <>توقّعت تأهل <b>{NAMES[state.my_qualified] || state.my_qualified}</b></>}
-              {state.qualified && <> · المتأهل فعلًا: <b style={{ color: C.green }}>{NAMES[state.qualified] || state.qualified}</b></>}
+              {actualAdv && <> · المتأهل فعلًا: <b style={{ color: C.green }}>{NAMES[actualAdv] || actualAdv}</b></>}
             </span>
           )}
         </span>
@@ -540,7 +544,8 @@ function MatchRow({ m, state, last, onChanged, clockOffset }) {
     const t = setInterval(() => setTick((n) => n + 1), 20_000);
     return () => clearInterval(t);
   }, [live]);
-  const minuteLabel = live ? liveMinuteLabel(state?.kickoff_at || m.kickoff, clockOffset) : null;
+  const phaseLabel = state?.live_phase === "ET" ? "أشواط إضافية" : state?.live_phase === "PENS" ? "ركلات ترجيح 🎯" : null;
+  const minuteLabel = live ? (phaseLabel || liveMinuteLabel(state?.kickoff_at || m.kickoff, clockOffset)) : null;
 
   // كشف الهدف: ارتفاع النتيجة الحية بين تحديثين ← احتفال 12 ثانية + قوووول 4 ثوانٍ
   const [goal, setGoal] = useState(null);   // 'a' | 'b' | 'both'
