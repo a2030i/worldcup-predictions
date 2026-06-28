@@ -208,6 +208,7 @@ function SharePanel({ m, state, pts, onClose }) {
 function PredictionBox({ m, state, onChanged, clockOffset }) {
   const [h, setH] = useState(state?.my_h ?? "");
   const [a, setA] = useState(state?.my_a ?? "");
+  const [q, setQ] = useState(state?.my_qualified ?? ""); // المتأهل بالترجيح (إقصائيات عند التعادل)
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false); // التوقع المحفوظ لا يُعدَّل إلا بزر «تعديل»
@@ -215,8 +216,8 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
 
   // توقع الخادم قد يصل بعد أول عرض (جلسة عائدة) — زامن الخانات ما لم يكن العضو يحرر
   useEffect(() => {
-    if (!editing) { setH(state?.my_h ?? ""); setA(state?.my_a ?? ""); }
-  }, [state?.my_h, state?.my_a]);
+    if (!editing) { setH(state?.my_h ?? ""); setA(state?.my_a ?? ""); setQ(state?.my_qualified ?? ""); }
+  }, [state?.my_h, state?.my_a, state?.my_qualified]);
 
   const locksAt = state?.locks_at || new Date(new Date(m.kickoff).getTime() - 5000).toISOString();
   const left = useCountdown(locksAt, clockOffset);
@@ -224,6 +225,7 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const locked = finished || left <= 0;
   const saved = state?.my_h != null;
   const pts = stagePoints(state?.stage || m.stage);
+  const isKnockout = (state?.stage || m.stage) !== "group"; // إقصائيات: التعادل يذهب للترجيح
 
   // خانة إقصائية لم يكتمل طرفاها بعد — لا تُفتح للتوقع حتى يُعرف المنتخبان
   if (!m.a || !m.b)
@@ -247,6 +249,12 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
           <span>{exact
             ? `توقع صحيح ✓ — كسبت ${countWord(earned, "نقطة", "نقطتين", "نقاط")}${jk ? " (مضاعفة بالجوكر)" : ""}`
             : "لم يطابق النتيجة — بدون نقاط"}</span>
+          {isKnockout && (state.my_qualified || state.qualified) && (
+            <span style={{ fontSize: 11.5, color: C.muted }}>
+              {state.my_qualified && <>توقّعت تأهل <b>{NAMES[state.my_qualified] || state.my_qualified}</b></>}
+              {state.qualified && <> · المتأهل فعلًا: <b style={{ color: C.green }}>{NAMES[state.qualified] || state.qualified}</b></>}
+            </span>
+          )}
         </span>
       </Note>
     );
@@ -262,6 +270,9 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
               <MyPick m={m} h={state.my_h} a={state.my_a} />
               {state.my_joker && <JokerChip />}
             </span>
+            {isKnockout && state.my_qualified && (
+              <span style={{ fontSize: 11.5, color: "#7C3AED", fontWeight: 700 }}>🎟️ توقّعت تأهل {NAMES[state.my_qualified] || state.my_qualified} (ترجيح)</span>
+            )}
           </span>
         ) : (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><LockIcon size={13} /> أُقفلت التوقعات — فاتك التوقع</span>
@@ -272,9 +283,11 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
   const save = async () => {
     if (busy) return;
     if (h === "" || a === "") { setMsg("أدخل النتيجة كاملة"); return; }
+    const needsQualifier = isKnockout && Number(h) === Number(a); // تعادل في إقصائي → لازم متأهل
+    if (needsQualifier && !q) { setMsg("اختر المنتخب المتأهل بركلات الترجيح"); return; }
     setBusy(true); setMsg("");
     try {
-      await submitPrediction(m.id, Number(h), Number(a));
+      await submitPrediction(m.id, Number(h), Number(a), needsQualifier ? q : null);
       setMsg("تم حفظ توقعك ✓");
       setEditing(false);
       onChanged?.();
@@ -299,6 +312,11 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
         أصِب النتيجة بالضبط واكسب <b style={{ color: C.gold }}>{countWord(pts, "نقطة واحدة", "نقطتين", "نقاط")}</b>
         <span style={{ opacity: 0.75 }}> — أي نتيجة أخرى بدون نقاط</span>
       </div>
+      {isKnockout && !readOnly && (
+        <div style={{ textAlign: "center", color: "#7C3AED", fontSize: 10.5, fontWeight: 700, margin: "-4px 0 8px" }}>
+          النتيجة النهائية تشمل الأشواط الإضافية · والتعادل يعني ركلات ترجيح
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
         <span style={{ flex: 1, minWidth: 0, color: C.muted, fontSize: 12, fontWeight: 700, textAlign: "left",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.a]}</span>
@@ -312,6 +330,15 @@ function PredictionBox({ m, state, onChanged, clockOffset }) {
         <span style={{ flex: 1, minWidth: 0, color: C.muted, fontSize: 12, fontWeight: 700, textAlign: "right",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{NAMES[m.b]}</span>
       </div>
+      {isKnockout && !readOnly && h !== "" && a !== "" && Number(h) === Number(a) && (
+        <QualifierSelector m={m} value={q} onPick={setQ} />
+      )}
+      {readOnly && isKnockout && state.my_qualified && (
+        <div style={{ marginTop: 10, textAlign: "center", color: "#7C3AED", fontSize: 12, fontWeight: 800,
+          background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 10, padding: "8px 10px" }}>
+          🎟️ توقّعت تأهل {NAMES[state.my_qualified] || state.my_qualified} بالترجيح
+        </div>
+      )}
       {readOnly ? (
         <>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -390,6 +417,28 @@ const JokerChip = () => (
   <span className="num" style={{ color: "#7C3AED", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.35)",
     fontWeight: 900, fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>🃏 جوكر ×2</span>
 );
+
+/* اختيار المتأهل بركلات الترجيح — يظهر في الإقصائيات عند توقّع تعادل */
+function QualifierSelector({ m, value, onPick }) {
+  const opt = (code) => (
+    <button type="button" onClick={() => onPick(code)} style={{
+      flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13,
+      padding: "9px 6px", borderRadius: 10,
+      border: `1px solid ${value === code ? "#7C3AED" : C.line}`,
+      background: value === code ? "rgba(124,58,237,0.14)" : C.card,
+      color: value === code ? "#7C3AED" : C.muted,
+      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+    }}>{flag(code)} {NAMES[code] || code}</button>
+  );
+  return (
+    <div style={{ marginTop: 10, padding: "9px 10px", borderRadius: 10, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.3)" }}>
+      <div style={{ textAlign: "center", color: "#7C3AED", fontSize: 11.5, fontWeight: 800, marginBottom: 7 }}>
+        🎟️ تعادل → ركلات ترجيح: من يتأهل؟
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>{opt(m.a)}{opt(m.b)}</div>
+    </div>
+  );
+}
 
 function Team({ code, goals, lead, flash }) {
   const tbd = !code; // خانة إقصائية لم يتحدد طرفها بعد
