@@ -202,11 +202,18 @@ function ChallengeView({ ch, matches, onBack }) {
 
   useEffect(() => { leaderboard(ch.id).then(setBoard).catch((e) => setErr(e.message)); }, [ch.id]);
 
-  // المباريات المقفلة فقط (توقعات الأعضاء تنكشف بعد القفل)
-  const lockedMatches = ALL_MATCHES.filter((m) => {
-    const s = (matches || []).find((x) => x.id === m.id);
-    return s && (s.status === "finished" || new Date(s.locks_at) <= new Date());
-  });
+  // المباريات المقفلة فقط (توقعات الأعضاء تنكشف بعد القفل) — من بيانات الخادم
+  // لتشمل الإقصائيات المضافة ديناميكيًا، لا من جدول المجموعات الثابت وحده
+  const staticById = Object.fromEntries(ALL_MATCHES.map((m) => [m.id, m]));
+  const lockedMatches = (matches || [])
+    .filter((s) => s.status === "finished" || (s.locks_at && new Date(s.locks_at) <= new Date()))
+    .map((s) => {
+      const st = staticById[s.id];
+      const [, sa, sb] = s.id.split("_");
+      const a = "team_a" in s ? s.team_a : sa, b = "team_b" in s ? s.team_b : sb;
+      return { id: s.id, a: a || st?.a, b: b || st?.b, date: st?.date || new Date(s.kickoff_at).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long" }) };
+    })
+    .filter((m) => m.a && m.b);
 
   const loadPreds = async (id) => {
     setMatchId(id); setPreds(null);
@@ -288,7 +295,7 @@ function ChallengeView({ ch, matches, onBack }) {
         }}>
           <option value="">اختر مباراة مقفلة...</option>
           {lockedMatches.map((m) => (
-            <option key={m.id} value={m.id}>{NAMES[m.a]} ضد {NAMES[m.b]} · {m.date}</option>
+            <option key={m.id} value={m.id}>{NAMES[m.a] || m.a} ضد {NAMES[m.b] || m.b} · {m.date}</option>
           ))}
         </select>
         {preds && (

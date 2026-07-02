@@ -78,7 +78,8 @@ function DayStars() {
   useEffect(() => { dayStars().then(setData).catch(() => {}); }, []);
   if (!data?.stars?.length) return null;
   const d = new Date(`${data.date}T12:00:00+03:00`);
-  const label = d.toLocaleDateString("ar-SA", { weekday: "long", day: "numeric", month: "long" });
+  // ميلادي بأرقام لاتينية — ar-SA وحدها تعرض التاريخ هجريًا
+  const label = d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { weekday: "long", day: "numeric", month: "long" });
   const medals = ["#EF9F27", "#C9CCDA", "#D8915A"];
   return (
     <div className="block" style={{ background: C.card, border: "1px solid rgba(184,119,26,0.35)", borderRadius: 16, padding: "12px 14px", marginBottom: 16 }}>
@@ -109,6 +110,7 @@ function buildStats(matches) {
   Object.values(GROUPS).flat().forEach((t) => (st[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }));
   (matches || []).forEach((m) => {
     if (m.status !== "finished") return;
+    if (m.stage && m.stage !== "group") return; // نتائج الإقصائيات لا تدخل جداول المجموعات
     const [a, b] = m.id.split("_").slice(1);
     const A = st[a], B = st[b];
     if (!A || !B) return;
@@ -123,6 +125,12 @@ function buildStats(matches) {
 
 export default function StandingsScreen({ matches }) {
   const st = useMemo(() => buildStats(matches), [matches]);
+  // دور المجموعات انتهى؟ اطوِ جداوله افتراضيًا وقدّم المحتوى الحي
+  const groupsOver = useMemo(
+    () => (matches || []).some((m) => m.stage && m.stage !== "group"),
+    [matches]);
+  const [showGroups, setShowGroups] = useState(false);
+  const groupsVisible = !groupsOver || showGroups;
 
   // قبل وصول بيانات الخادم لا نعرض أصفارًا مضللة
   if (matches === null) {
@@ -133,11 +141,26 @@ export default function StandingsScreen({ matches }) {
     <>
       <PrizeBanner />
       <DayStars />
-      <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: "0 0 4px", lineHeight: 1.8 }}>
-        <span style={{ color: C.green }}>●</span> أول منتخبين يتأهلان مباشرة (+ أفضل 8 من أصحاب المركز الثالث)
-        <br />ترتيب استرشادي يتحدّث تلقائيًا مع كل نتيجة معتمدة
-      </p>
-      {Object.keys(GROUPS).map((letter) => {
+      {groupsOver && (
+        <button onClick={() => setShowGroups(!showGroups)} style={{
+          width: "100%", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 13.5,
+          padding: "12px 14px", borderRadius: 14, border: `1px solid ${C.line}`,
+          background: C.card, color: C.muted, display: "flex", alignItems: "center",
+          justifyContent: "space-between", marginBottom: 4,
+        }}>
+          <span>جداول دور المجموعات — انتهى</span>
+          <span>{showGroups ? "▴" : "▾"}</span>
+        </button>
+      )}
+      {groupsVisible && (
+        <p style={{ color: C.muted, fontSize: 12, textAlign: "center", margin: "8px 0 4px", lineHeight: 1.8 }}>
+          {groupsOver
+            ? "هكذا انتهى دور المجموعات — أول منتخبين تأهلا مباشرة (+ أفضل 8 من أصحاب المركز الثالث)"
+            : <><span style={{ color: C.green }}>●</span> أول منتخبين يتأهلان مباشرة (+ أفضل 8 من أصحاب المركز الثالث)
+              <br />ترتيب استرشادي يتحدّث تلقائيًا مع كل نتيجة معتمدة</>}
+        </p>
+      )}
+      {groupsVisible && Object.keys(GROUPS).map((letter) => {
         const order = GROUPS[letter].slice().sort((a, b) =>
           (st[b].pts - st[a].pts) || ((st[b].gf - st[b].ga) - (st[a].gf - st[a].ga)) || (st[b].gf - st[a].gf));
         const hasKsa = GROUPS[letter].includes("SA");

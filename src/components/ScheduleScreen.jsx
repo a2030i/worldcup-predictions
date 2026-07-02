@@ -419,7 +419,7 @@ function MyPick({ m, h, a }) {
 
 const JokerChip = () => (
   <span className="num" style={{ color: "#7C3AED", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.35)",
-    fontWeight: 900, fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>🃏 جوكر ×2</span>
+    fontWeight: 900, fontSize: 11, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap" }}>🃏 جوكر <span dir="ltr">×2</span></span>
 );
 
 /* اختيار المتأهل بركلات الترجيح — يظهر في الإقصائيات عند توقّع تعادل */
@@ -531,7 +531,8 @@ function Distribution({ m }) {
 function MatchRow({ m, state, last, onChanged, clockOffset }) {
   const ksa = m.a === "SA" || m.b === "SA";
   const fin = state?.status === "finished";
-  const live = !fin && state?.live_h != null; // نتيجة لحظية من المزامنة التلقائية
+  // «مباشر» عند وجود نتيجة لحظية أو طور حي (إضافي/ترجيح قد يُضبط قبل أول هدف)
+  const live = !fin && (state?.live_h != null || !!state?.live_phase);
   const gA = fin ? state.result_h : live ? state.live_h : null;
   const gB = fin ? state.result_a : live ? state.live_a : null;
   const ksaWon = fin && ksa &&
@@ -731,6 +732,11 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
         ))}
       </div>
 
+      {days.length === 0 && (
+        <p style={{ color: C.muted, fontSize: 13, textAlign: "center", marginTop: 26, lineHeight: 1.9 }}>
+          لا مباريات مطابقة حاليًا — جرّب «كل المباريات»
+        </p>
+      )}
       {days.map((day) => {
         const isToday = day.iso === today;
         const hasKsa = day.matches.some((m) => m.a === "SA" || m.b === "SA");

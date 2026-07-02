@@ -7,6 +7,8 @@ import { GiftIcon, CopyIcon, BackIcon, TrophyIcon } from "../icons.jsx";
 
 const matchLabel = (matchId) => {
   const [, a, b] = matchId.split("_");
+  // معرّفات الخانات الثابتة (مثل R32-1) لا تحمل أكواد المنتخبات
+  if (!a || !b || (!NAMES[a] && !NAMES[b])) return "مباراة الأدوار الإقصائية";
   return `${NAMES[a] || a} × ${NAMES[b] || b}`;
 };
 

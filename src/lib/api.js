@@ -67,6 +67,8 @@ async function rpc(fn, args) {
   if (error) {
     const code = Object.keys(ERRORS).find((k) => error.message.includes(k));
     if (code) throw new Error(ERRORS[code]);
+    if (/Could not find the function/i.test(error.message))
+      throw new Error("هذه الميزة غير مفعّلة بعد — أبلغ المشرف"); // هجرة SQL لم تُنفَّذ
     if (/fetch|network|Failed/i.test(error.message))
       throw new Error("تعذر الاتصال — تحقق من الإنترنت وحاول مجددًا");
     throw new Error("حدث خطأ غير متوقع، حاول مرة أخرى");

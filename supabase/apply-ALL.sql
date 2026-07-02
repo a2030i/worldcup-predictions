@@ -8,6 +8,7 @@
 -- ① الأعمدة الجديدة
 alter table wc.predictions add column if not exists joker boolean not null default false;
 alter table wc.matches     add column if not exists live_phase text;   -- null | 'ET' | 'PENS'
+alter table wc.matches     add column if not exists live_manual boolean not null default false;
 alter table wc.matches     alter column team_a drop not null;          -- (للأمان إن لم يُطبّق سابقًا)
 alter table wc.matches     alter column team_b drop not null;
 
@@ -18,7 +19,8 @@ returns table (
   id text, status text, stage text, kickoff_at timestamptz, locks_at timestamptz,
   result_h int, result_a int, qualified text,
   my_h int, my_a int, my_qualified text, predictors bigint, server_now timestamptz,
-  live_h int, live_a int, team_a text, team_b text, my_joker boolean, live_phase text
+  live_h int, live_a int, team_a text, team_b text, my_joker boolean, live_phase text,
+  live_manual boolean
 ) language plpgsql security definer set search_path = wc, public as $$
 declare u wc.profiles;
 begin
@@ -28,7 +30,8 @@ begin
          m.result_h, m.result_a, m.qualified,
          p.h, p.a, p.qualified,
          (select count(*) from wc.predictions x where x.match_id = m.id),
-         now(), m.live_h, m.live_a, m.team_a, m.team_b, coalesce(p.joker, false), m.live_phase
+         now(), m.live_h, m.live_a, m.team_a, m.team_b, coalesce(p.joker, false), m.live_phase,
+         m.live_manual
   from wc.matches m
   left join wc.predictions p on p.match_id = m.id and p.user_id = u.id
   order by m.kickoff_at;
@@ -48,9 +51,11 @@ begin
     raise exception 'PREDICTION_NOT_FOUND'; end if;
   if p_on then
     d := (m.kickoff_at at time zone 'Asia/Riyadh')::date;
+    -- الجوكر مستهلَك فقط على مباراة أُقفلت ولم تُلغَ (الملغاة لا تأكل جوكر اليوم)
     if exists (select 1 from wc.predictions pp join wc.matches mm on mm.id = pp.match_id
       where pp.user_id = u.id and pp.joker and pp.match_id <> p_match_id
-        and (mm.kickoff_at at time zone 'Asia/Riyadh')::date = d and now() >= wc.lock_at(mm))
+        and (mm.kickoff_at at time zone 'Asia/Riyadh')::date = d
+        and now() >= wc.lock_at(mm) and mm.status <> 'cancelled')
       then raise exception 'JOKER_USED'; end if;
     update wc.predictions pp set joker = false from wc.matches mm
       where pp.user_id = u.id and pp.match_id = mm.id and pp.joker
@@ -77,6 +82,36 @@ begin
   return json_build_object('ok', true);
 end $$;
 grant execute on function public.admin_set_phase(uuid, text, text) to anon, authenticated;
+
+-- ④ب تأجيل/إلغاء المباراة يصفّر أيضًا الحالة الحية (نتيجة لحظية/طور) — لا حالة هجينة
+create or replace function public.admin_reschedule(p_token uuid, p_match_id text, p_kickoff timestamptz)
+returns json language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles;
+begin
+  u := wc._auth_admin(p_token);
+  update wc.matches set kickoff_at = p_kickoff, status = 'scheduled',
+                        result_h = null, result_a = null, qualified = null,
+                        live_h = null, live_a = null, live_phase = null, live_manual = false
+  where id = p_match_id;
+  if not found then raise exception 'MATCH_NOT_FOUND'; end if;
+  insert into wc.audit_log (admin_id, action, details)
+  values (u.id, 'reschedule', json_build_object('match', p_match_id, 'kickoff', p_kickoff));
+  return json_build_object('ok', true);
+end $$;
+
+create or replace function public.admin_cancel_match(p_token uuid, p_match_id text)
+returns json language plpgsql security definer set search_path = wc, public as $$
+declare u wc.profiles;
+begin
+  u := wc._auth_admin(p_token);
+  update wc.matches set status = 'cancelled',
+                        live_h = null, live_a = null, live_phase = null, live_manual = false
+  where id = p_match_id;
+  if not found then raise exception 'MATCH_NOT_FOUND'; end if;
+  insert into wc.audit_log (admin_id, action, details)
+  values (u.id, 'cancel_match', json_build_object('match', p_match_id));
+  return json_build_object('ok', true);
+end $$;
 
 -- ⑤ توزيع توقعات الجمهور (بعد القفل فقط)
 create or replace function public.match_distribution(p_token uuid, p_match_id text)
@@ -288,7 +323,10 @@ declare
 begin
   select * into cfg from wc.sync_config where id;
   if cfg.id is null or not cfg.enabled then return 'disabled'; end if;
-  if (select count(*) from wc.matches where stage in ('r32','r16','qf','sf','tp','f')) >= 32 then
+  -- الاكتمال يُقاس بالخانات المكتملة الطرفين فقط (خانات الأدمن الفارغة لا تُحتسب)
+  if (select count(*) from wc.matches
+      where stage in ('r32','r16','qf','sf','tp','f')
+        and team_a is not null and team_b is not null) >= 32 then
     update wc.sync_config set last_seed_run = now(), last_seed_status = 'مكتمل' where id;
     return 'complete';
   end if;
@@ -319,6 +357,19 @@ begin
     if m.id is not null then
       if m.status = 'scheduled' and m.stage is distinct from st then
         update wc.matches set stage = st where id = m.id; n_upd := n_upd + 1; end if;
+      continue;
+    end if;
+    -- خانة أدمن فارغة بنفس المرحلة والموعد؟ املأ منتخبيها بدل إنشاء صف مكرر
+    -- (يحفظ توقعات مَن توقعوا على الخانة ويمنع انقسام المباراة على صفّين)
+    select * into m from wc.matches
+    where kickoff_at = k and stage = st and status = 'scheduled'
+      and (team_a is null or team_b is null)
+    order by id limit 1;
+    if m.id is not null then
+      update wc.matches set team_a = home_code, team_b = away_code where id = m.id;
+      n_upd := n_upd + 1;
+      insert into wc.audit_log (admin_id, action, details)
+      values (null, 'seed_fill_slot', jsonb_build_object('id', m.id, 'a', home_code, 'b', away_code, 'stage', st));
       continue;
     end if;
     iso := to_char(k at time zone 'Asia/Riyadh', 'YYYY-MM-DD');

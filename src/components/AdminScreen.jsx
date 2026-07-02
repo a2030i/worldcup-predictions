@@ -9,6 +9,7 @@ import {
   adminSetAnnouncement, adminClearAnnouncement, adminIntegrityReport, adminAddMatch, dayStars,
   adminSaveStore, adminToggleStore, adminDeleteStore, adminStoresStats, adminAddCodes,
   adminSetLive, adminFinishLive, adminUpsertMatch, adminSetPhase,
+  adminLiveGoal, adminReleaseLive,
 } from "../lib/api";
 import { digitsOnly, countWord, downloadCSV, STAGE_NAMES, ksaParts, stagePoints, liveMinuteLabel } from "../lib/format";
 import { SearchIcon, UsersIcon, ListIcon, ChartIcon, TrophyIcon, BallIcon, AlertIcon, RefreshIcon, BackIcon, ClockIcon, GiftIcon } from "../icons.jsx";
@@ -142,7 +143,9 @@ function AnnounceComposer() {
 /* وحدة التحكم الحي: زر «هدف» كبير لكل فريق — يصل للجميع بثوانٍ مع قوووول.
    بمجرد لمس الأدمن للمباراة تصبح يدوية: المزامنة لا تلمسها (لا تعارض) */
 function LiveMatch({ r, onChanged }) {
-  const [, a, b] = r.id.split("_");
+  // المنتخبان من الخادم أولًا (معرّفات الخانات الثابتة لا تحمل الأكواد)
+  const [, ia, ib] = r.id.split("_");
+  const a = r.team_a || ia, b = r.team_b || ib;
   // حالة تفاؤلية فورية فوق رقم الخادم (لا ننتظر دورة التحديث)
   const [local, setLocal] = useState({ h: r.live_h, a: r.live_a });
   const [busy, setBusy] = useState(false);
@@ -266,7 +269,8 @@ function TodayTab({ matches, onChanged }) {
       <Card title={`مباريات اليوم (${todays.length})`}>
         {todays.length === 0 && <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>لا مباريات اليوم</p>}
         {todays.map((r) => {
-          const [, a, b] = r.id.split("_");
+          const [, ia, ib] = r.id.split("_");
+          const a = r.team_a || ia, b = r.team_b || ib;
           const k = ksaParts(r.kickoff_at);
           const live = r.status === "scheduled" && r.live_h != null;
           return (
@@ -315,7 +319,18 @@ function MatchesTab({ matches, onChanged }) {
   const [msg, setMsg] = useState("");
 
   const byId = Object.fromEntries((matches || []).map((r) => [r.id, r]));
-  const sel = ALL_MATCHES.find((m) => m.id === mid);
+  // قائمة الإدارة = المجموعات الثابتة + الإقصائيات الديناميكية من الخادم
+  const staticIds = new Set(ALL_MATCHES.map((m) => m.id));
+  const dynamicMatches = (matches || [])
+    .filter((r) => !staticIds.has(r.id))
+    .map((r) => {
+      const [, sa, sb] = r.id.split("_");
+      const a = "team_a" in r ? r.team_a : sa, b = "team_b" in r ? r.team_b : sb;
+      return { id: r.id, a, b, stage: r.stage || "group",
+        date: `${STAGE_NAMES[r.stage] || ""} · ${ksaParts(r.kickoff_at).date}` };
+    });
+  const manageable = [...ALL_MATCHES, ...dynamicMatches];
+  const sel = manageable.find((m) => m.id === mid);
   const isKnockout = sel && sel.stage && sel.stage !== "group";
 
   const run = async (fn, okMsg) => {
@@ -328,10 +343,11 @@ function MatchesTab({ matches, onChanged }) {
         <select value={mid} onChange={(e) => { setMid(e.target.value); setStats(null); setMsg(""); }}
           style={{ ...field, width: "100%", background: "#FFFFFF" }}>
           <option value="">اختر المباراة...</option>
-          {ALL_MATCHES.map((m) => {
+          {manageable.map((m) => {
             const s = byId[m.id];
             const tag = s?.status === "finished" ? `✓ (${s.result_h}–${s.result_a}) ` : s?.status === "cancelled" ? "ملغاة · " : "";
-            return <option key={m.id} value={m.id}>{tag}{NAMES[m.a]} ضد {NAMES[m.b]} · {m.date}</option>;
+            const nm = (c) => (c ? NAMES[c] || c : "بانتظار التأهل");
+            return <option key={m.id} value={m.id}>{tag}{nm(m.a)} ضد {nm(m.b)} · {m.date}</option>;
           })}
         </select>
         <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -340,11 +356,11 @@ function MatchesTab({ matches, onChanged }) {
           <span style={{ color: C.muted, fontWeight: 800 }}>–</span>
           <input style={{ ...field, width: 64, textAlign: "center" }} inputMode="numeric" maxLength={2}
             value={a} onChange={(e) => setA(digitsOnly(e.target.value))} placeholder={sel ? NAMES[sel.b] : "الثاني"} />
-          {isKnockout && (
+          {isKnockout && sel.a && sel.b && (
             <select value={qualified} onChange={(e) => setQualified(e.target.value)} style={{ ...field, background: "#FFFFFF" }}>
               <option value="">المتأهل (للإقصائيات)...</option>
-              <option value={sel.a}>{NAMES[sel.a]}</option>
-              <option value={sel.b}>{NAMES[sel.b]}</option>
+              <option value={sel.a}>{NAMES[sel.a] || sel.a}</option>
+              <option value={sel.b}>{NAMES[sel.b] || sel.b}</option>
             </select>
           )}
           <button style={gold} onClick={() => {
