@@ -224,6 +224,112 @@ export async function generatePrizeCard() {
   return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
 }
 
+// أساس البطاقة الطولية (1080×1920) بهوية 26 — خلفية وكتل وشريط وترويسة
+function storyBase() {
+  const W = 1080, H = 1920;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  const F = (size, weight = 900) => `${weight} ${size}px Cairo, 'Segoe UI', Tahoma, sans-serif`;
+  x.direction = "rtl"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillStyle = "#F7F4ED"; x.fillRect(0, 0, W, H);
+  quarter(x, W, 0, 360, Math.PI / 2, "#FF8A75");
+  quarter(x, 0, 0, 330, 0, "#2B6BE4");
+  x.fillStyle = "#FFD23F"; x.beginPath(); x.arc(170, 470, 64, 0, 7); x.fill();
+  quarter(x, W, 510, 100, Math.PI / 2, "#19C39C");
+  quarter(x, 0, H, 320, -Math.PI / 2, "#7C3AED");
+  quarter(x, W, H, 300, Math.PI, "#19C39C");
+  const cx = W / 2;
+  let y = 360;
+  const strip = ["#E0432F", "#2B6BE4", "#FFD23F", "#19C39C", "#7C3AED"];
+  const sw = 64, gap = 14, total = strip.length * sw + (strip.length - 1) * gap;
+  strip.forEach((c, i) => { x.fillStyle = c; rounded(x, cx - total / 2 + i * (sw + gap), y, sw, 16, 8); x.fill(); });
+  y += 92;
+  x.fillStyle = "#6E6857"; x.font = F(30, 700);
+  x.fillText("مونديال 2026 · أمريكا، كندا والمكسيك", cx, y);
+  y += 92;
+  x.fillStyle = "#1B1B20"; x.font = F(86);
+  x.fillText("تحدي التوقعات", cx, y);
+  return { cv, x, W, H, cx, y, F };
+}
+
+function storyFooter(x, cx, y, F, line1, line2) {
+  x.fillStyle = "#1B1B20"; x.font = F(50); x.fillText(line1, cx, y);
+  y += 74;
+  x.fillStyle = "#E0432F"; x.font = F(50); x.fillText(line2, cx, y);
+  y += 88;
+  x.fillStyle = "#2B6BE4"; x.font = `700 34px 'Segoe UI', Tahoma, sans-serif`;
+  x.save(); x.direction = "ltr"; x.fillText(SITE, cx, y); x.restore();
+}
+
+const ordinal = (n) => ["", "الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر"][n] || `الـ${n}`;
+
+// بطاقة «مركزي في التحدي» — طولية للسناب/ستوري
+export async function generateRankCard({ challengeName, displayName, rank, members, points }) {
+  try { await document.fonts.ready; } catch {}
+  const { cv, x, cx, F } = storyBase();
+  let y = 360 + 92 + 92 + 70;
+  x.fillStyle = "#E0432F"; x.font = F(38);
+  x.fillText(challengeName, cx, y);
+
+  const cardW = 900, cardX = cx - cardW / 2, cardH = 760;
+  y += 80;
+  x.fillStyle = "#FFFFFF"; x.strokeStyle = "#E8E2D2"; x.lineWidth = 3;
+  rounded(x, cardX, y, cardW, cardH, 48); x.fill(); x.stroke();
+
+  let iy = y + 120;
+  x.fillStyle = "#6E6857"; x.font = F(36, 700);
+  x.fillText("مركزي الحالي", cx, iy);
+  iy += 170;
+  const medal = rank === 1 ? "#EF9F27" : rank === 2 ? "#C9CCDA" : rank === 3 ? "#D8915A" : "#E0432F";
+  x.fillStyle = medal; x.font = F(150);
+  x.fillText(`المركز ${ordinal(rank)}`, cx, iy);
+  iy += 130;
+  x.fillStyle = "#6E6857"; x.font = F(42, 700);
+  x.fillText(`من بين ${members} متنافسًا`, cx, iy);
+  iy += 130;
+  x.fillStyle = "#B8771A"; x.font = F(56);
+  x.fillText(`${points} نقطة`, cx, iy);
+  iy += 110;
+  x.fillStyle = "#1B1B20"; x.font = F(40);
+  x.fillText(displayName, cx, iy);
+
+  storyFooter(x, cx, y + cardH + 120, F, "تقدر تطيحني من الصدارة؟", "ادخل نافسني!");
+  return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
+}
+
+// بطاقة «كسبت جائزة» — بلا كود الكوبون (الكود سرّي لصاحبه)
+export async function generateWinCard({ displayName, storeName, discountText }) {
+  try { await document.fonts.ready; } catch {}
+  const { cv, x, cx, F } = storyBase();
+  let y = 360 + 92 + 92 + 70;
+  x.fillStyle = "#E0432F"; x.font = F(38);
+  x.fillText("توقع صحيح = جائزة حقيقية", cx, y);
+
+  const cardW = 900, cardX = cx - cardW / 2, cardH = 700;
+  y += 80;
+  x.fillStyle = "#FFFFFF"; x.strokeStyle = "#E8E2D2"; x.lineWidth = 3;
+  rounded(x, cardX, y, cardW, cardH, 48); x.fill(); x.stroke();
+
+  let iy = y + 130;
+  x.font = F(110); x.fillText("🎁", cx, iy);
+  iy += 150;
+  x.fillStyle = "#1B1B20"; x.font = F(72);
+  x.fillText("أصبت النتيجة بالضبط", cx, iy);
+  iy += 120;
+  x.fillStyle = "#B8771A"; x.font = F(54);
+  x.fillText(`وكسبت جائزة من ${storeName}`, cx, iy);
+  iy += 110;
+  x.fillStyle = "#19C39C"; x.font = F(44);
+  x.fillText(discountText, cx, iy);
+  iy += 110;
+  x.fillStyle = "#6E6857"; x.font = F(38, 700);
+  x.fillText(displayName, cx, iy);
+
+  storyFooter(x, cx, y + cardH + 120, F, "توقّع وأصب النتيجة", "واكسب جوائز مثلي!");
+  return new Promise((res) => cv.toBlob((b) => res(b), "image/png"));
+}
+
 // مشاركة أصلية على الجوال، وتنزيل على الكمبيوتر
 export async function shareBlob(blob, fileName = "توقعي.png") {
   const file = new File([blob], fileName, { type: "image/png" });

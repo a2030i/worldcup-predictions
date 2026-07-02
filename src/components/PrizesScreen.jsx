@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { C } from "../theme";
 import { NAMES } from "../data/tournament";
-import { myPrizes, prizeOptions, claimPrize } from "../lib/api";
+import { myPrizes, prizeOptions, claimPrize, getSession } from "../lib/api";
+import { generateWinCard, shareBlob } from "../lib/shareCard";
 import { countWord } from "../lib/format";
-import { GiftIcon, CopyIcon, BackIcon, TrophyIcon } from "../icons.jsx";
+import { GiftIcon, CopyIcon, BackIcon, TrophyIcon, ShareIcon } from "../icons.jsx";
 
 const matchLabel = (matchId) => {
   const [, a, b] = matchId.split("_");
@@ -80,6 +81,20 @@ function StorePicker({ prize, onBack, onClaimed }) {
 /* كشف الكوبون بعد الاستلام */
 function Reveal({ claim, onDone }) {
   const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  // بطاقة فرحة الفوز — بلا كود الكوبون (الكود سرّي لصاحبه)
+  const shareWin = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const blob = await generateWinCard({
+        displayName: getSession()?.displayName || getSession()?.username || "",
+        storeName: claim.store_name, discountText: claim.discount_text,
+      });
+      await shareBlob(blob, "كسبت-جائزة.png");
+    } catch {}
+    setSharing(false);
+  };
   return (
     <div className="block" style={{ textAlign: "center", padding: "20px 0" }}>
       <div style={{ color: "#E0432F" }}><GiftIcon size={46} style={{ strokeWidth: 1.4 }} /></div>
@@ -104,7 +119,12 @@ function Reveal({ claim, onDone }) {
         </p>
       )}
       <p style={{ color: C.muted, fontSize: 11.5, margin: "14px 0 0" }}>الكوبون محفوظ دائمًا في جوائزي — لن تفقده.</p>
-      <button style={{ ...btn(true), marginTop: 14 }} onClick={onDone}>تم</button>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+        <button style={{ ...btn(true), opacity: sharing ? 0.6 : 1 }} onClick={shareWin} disabled={sharing}>
+          <ShareIcon size={14} /> {sharing ? "لحظات..." : "شارك فرحتك (بلا الكود)"}
+        </button>
+        <button style={btn(false)} onClick={onDone}>تم</button>
+      </div>
     </div>
   );
 }

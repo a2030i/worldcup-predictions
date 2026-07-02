@@ -691,6 +691,19 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
 
   const pickTz = (t) => { setTZ(t); setTzState(t); };
 
+  // مباريات اليوم المفتوحة التي لم أتوقعها بعد — تنبيه قبل فوات القفل
+  const unpredicted = useMemo(() => {
+    const nowMs = Date.now() + clockOffset;
+    return allMatches.filter((m) => {
+      if (!m.a || !m.b) return false;
+      const s = byId[m.id];
+      if (s?.my_h != null) return false;
+      if (s?.status && s.status !== "scheduled") return false;
+      const locksAt = s?.locks_at ? new Date(s.locks_at).getTime() : new Date(m.kickoff).getTime() - 5000;
+      return locksAt > nowMs && tzParts(m.kickoff, tz).iso === today;
+    });
+  }, [allMatches, byId, tz, today, clockOffset]);
+
   // قفزة تلقائية للمباراة الحية، وإلا القادمة الأقرب — مرة واحدة بعد وصول البيانات
   // (إن كانت كل المباريات منتهية تبقى الصفحة من أعلاها)
   const didScroll = useRef(false);
@@ -706,6 +719,18 @@ export default function ScheduleScreen({ matches, onChanged, clockOffset = 0 }) 
 
   return (
     <>
+      {unpredicted.length > 0 && (
+        <button onClick={() =>
+          document.getElementById(`match-${unpredicted[0].id}`)?.scrollIntoView({ block: "start", behavior: "smooth" })
+        } style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          background: "rgba(224,67,47,0.08)", border: "2px solid rgba(224,67,47,0.45)",
+          color: "#C2331F", fontSize: 13, fontWeight: 800, borderRadius: 12, padding: "10px 12px",
+          margin: "12px 0 0", cursor: "pointer", fontFamily: "inherit",
+        }}>
+          ⚽ {countWord(unpredicted.length, "مباراة الليلة بلا توقع منك", "مباراتا الليلة بلا توقع منك", "مباريات الليلة بلا توقع منك")} — اضغط وتوقّع قبل القفل!
+        </button>
+      )}
       <ProgressStrip matches={matches} />
       <RulesCard />
       {showTzToggle && (

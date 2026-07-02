@@ -5,6 +5,8 @@ import {
   myChallenges, createChallenge, joinChallenge, leaderboard, leaderboardKnockout, matchPredictions, myRanks,
   challengeSetLock, challengeRegenCode, challengeKick, challengeMembers,
 } from "../lib/api";
+import { getSession } from "../lib/api";
+import { generateRankCard, shareBlob } from "../lib/shareCard";
 import { countWord } from "../lib/format";
 import { PlusIcon, TicketIcon, UsersIcon, TrophyIcon, BallIcon, CopyIcon, ShareIcon, BackIcon, EyeIcon } from "../icons.jsx";
 
@@ -68,7 +70,7 @@ export default function ChallengesScreen({ matches }) {
     setBusy(false);
   };
 
-  if (open) return <ChallengeView ch={open} matches={matches} onBack={() => setOpen(null)} />;
+  if (open) return <ChallengeView ch={open} matches={matches} myRank={ranks[open.id]} onBack={() => setOpen(null)} />;
 
   return (
     <div className="block">
@@ -192,9 +194,10 @@ function OwnerTools({ ch, code, onCode }) {
 }
 
 /* داخل التحدي: لوحة الصدارة + توقعات الأعضاء للمباريات المقفلة */
-function ChallengeView({ ch, matches, onBack }) {
+function ChallengeView({ ch, matches, myRank, onBack }) {
   const [board, setBoard] = useState(null);
   const [scope, setScope] = useState("all"); // all = التحدي الكامل · ko = سباق الإقصائيات
+  const [sharingRank, setSharingRank] = useState(false);
   const [matchId, setMatchId] = useState("");
   const [preds, setPreds] = useState(null);
   const [err, setErr] = useState("");
@@ -233,6 +236,20 @@ function ChallengeView({ ch, matches, onBack }) {
   const copyCode = async () => {
     try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }
     catch { /* المتصفحات القديمة */ }
+  };
+  // بطاقة «مركزي في التحدي» — مشاركة مباشرة (سناب/واتساب) أو تنزيل على الكمبيوتر
+  const shareMyRank = async () => {
+    if (sharingRank || !myRank) return;
+    setSharingRank(true);
+    try {
+      const blob = await generateRankCard({
+        challengeName: ch.name,
+        displayName: getSession()?.displayName || getSession()?.username || "",
+        rank: Number(myRank.my_rank), members: Number(myRank.members), points: Number(myRank.my_points),
+      });
+      await shareBlob(blob, "مركزي-في-التحدي.png");
+    } catch { setErr("تعذر إنشاء البطاقة"); }
+    setSharingRank(false);
   };
   const shareWhatsApp = () => {
     const text = `تعال نافسنا في توقعات المونديال! ادخل «${ch.name}» بالكود ${code}\nhttps://a2030i.github.io/worldcup-predictions/`;
@@ -288,6 +305,27 @@ function ChallengeView({ ch, matches, onBack }) {
           سباق جديد يبدأ من صفر لكل الأعضاء — يحتسب مباريات الأدوار الإقصائية فقط، فرصتك للانقضاض! 🏁
         </p>
       )}
+
+      {scope === "all" && board?.length > 0 && myRank && (() => {
+        const gap = Number(board[0].points) - Number(myRank.my_points);
+        const first = Number(myRank.my_rank) === 1;
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap",
+            background: first ? C.goldSoft : "rgba(43,107,228,0.07)",
+            border: `1px solid ${first ? "rgba(184,119,26,0.35)" : "rgba(43,107,228,0.3)"}`,
+            borderRadius: 12, padding: "10px 14px" }}>
+            <span style={{ flex: 1, minWidth: 160, color: first ? C.gold : C.text, fontSize: 12.5, fontWeight: 800, lineHeight: 1.7 }}>
+              {first
+                ? "أنت المتصدر! 🏆 حافظ على صدارتك"
+                : `الفارق بينك وبين الأول ${countWord(gap, "نقطة واحدة", "نقطتان", "نقاط")} — والسباق طويل!`}
+            </span>
+            <button onClick={shareMyRank} disabled={sharingRank} style={{
+              ...btn(true), padding: "9px 14px", fontSize: 12.5, opacity: sharingRank ? 0.6 : 1 }}>
+              <ShareIcon size={13} /> {sharingRank ? "لحظات..." : "شارك مركزي"}
+            </button>
+          </div>
+        );
+      })()}
 
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "8px 14px", marginTop: 8 }}>
         <div style={{ display: "flex", color: C.muted, fontSize: 11, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
