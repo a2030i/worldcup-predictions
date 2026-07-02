@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { C } from "../theme";
 import { NAMES, GROUPS, flag } from "../data/tournament";
 import { dayStars } from "../lib/api";
-import { countWord } from "../lib/format";
+import { countWord, STAGE_NAMES, ksaParts, stagePoints } from "../lib/format";
 import { generatePrizeCard, shareBlob, PRIZES } from "../lib/shareCard";
 import { TrophyIcon, ShareIcon } from "../icons.jsx";
 
@@ -99,6 +99,75 @@ function DayStars() {
   );
 }
 
+/* 🏆 مسار البطولة — الأدوار الإقصائية من الخادم (يتحدّث تلقائيًا مع البذر والنتائج) */
+const KO_ORDER = ["r32", "r16", "qf", "sf", "tp", "f"];
+
+function BracketRow({ m }) {
+  const fin = m.status === "finished";
+  const [, ia, ib] = m.id.split("_");
+  const a = "team_a" in m ? m.team_a : ia, b = "team_b" in m ? m.team_b : ib;
+  const k = ksaParts(m.kickoff_at);
+  // المتأهل: المخزّن (ترجيح) أو الأعلى نتيجةً في الحاسمة
+  const adv = m.qualified || (fin && m.result_h !== m.result_a ? (m.result_h > m.result_a ? a : b) : null);
+  const pens = fin && m.result_h === m.result_a; // تعادل مثبّت = حُسمت بالترجيح
+  const team = (code, end) => (
+    <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 5,
+      justifyContent: end ? "flex-start" : "flex-end", overflow: "hidden",
+      color: !code ? C.muted : adv === code ? C.gold : C.text,
+      fontWeight: code && adv === code ? 900 : 600, fontSize: 12.5,
+      fontStyle: !code ? "italic" : "normal", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+      {!end && <span style={{ fontSize: 15 }}>{code ? flag(code) : "🏳️"}</span>}
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{code ? NAMES[code] || code : "بانتظار التأهل"}</span>
+      {end && <span style={{ fontSize: 15 }}>{code ? flag(code) : "🏳️"}</span>}
+    </span>
+  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
+      {team(a, false)}
+      <span className="num" style={{ flex: "0 0 auto", minWidth: 64, textAlign: "center" }}>
+        {fin ? (
+          <span dir="ltr" style={{ color: C.text, fontWeight: 900, fontSize: 14 }}>
+            {m.result_h}–{m.result_a}{pens && <span title="حُسمت بركلات الترجيح" style={{ fontSize: 11 }}> 🎯</span>}
+          </span>
+        ) : (
+          <span style={{ color: C.muted, fontSize: 10.5, fontWeight: 700, lineHeight: 1.5, display: "inline-block" }}>
+            {k.date}<br />{k.t} {k.p}
+          </span>
+        )}
+      </span>
+      {team(b, true)}
+    </div>
+  );
+}
+
+function Bracket({ matches }) {
+  const ko = (matches || []).filter((m) => m.stage && m.stage !== "group" && m.status !== "cancelled");
+  if (ko.length === 0) return null;
+  const byStage = {};
+  ko.forEach((m) => { (byStage[m.stage] ||= []).push(m); });
+  Object.values(byStage).forEach((l) => l.sort((x, y) => new Date(x.kickoff_at) - new Date(y.kickoff_at)));
+  return (
+    <div className="block" style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "14px 14px 4px", marginBottom: 16 }}>
+      <div style={{ color: C.text, fontWeight: 900, fontSize: 15.5 }}>🏆 مسار البطولة</div>
+      {KO_ORDER.filter((s) => byStage[s]).map((s) => (
+        <div key={s}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0 2px" }}>
+            <span style={{ background: C.goldSoft, color: C.gold, border: "1px solid rgba(184,119,26,0.35)",
+              fontWeight: 800, fontSize: 12, padding: "4px 12px", borderRadius: 999 }}>
+              {STAGE_NAMES[s]} · {countWord(stagePoints(s), "نقطة", "نقطتان", "نقاط")}
+            </span>
+            <span style={{ flex: 1, height: 1, background: C.line }} />
+          </div>
+          {byStage[s].map((m) => <BracketRow key={m.id} m={m} />)}
+        </div>
+      ))}
+      <p style={{ color: C.muted, fontSize: 10.5, textAlign: "center", margin: "8px 0", opacity: 0.85 }}>
+        🎯 = حُسمت بركلات الترجيح · المتأهل بالذهبي · يتحدّث تلقائيًا مع كل نتيجة
+      </p>
+    </div>
+  );
+}
+
 const COLW = { p: 30, rec: 48, gd: 36, pts: 40 };
 const Cell = ({ w, children, style }) => (
   <span className="num" style={{ width: w, textAlign: "center", flex: "0 0 auto", ...style }}>{children}</span>
@@ -140,6 +209,7 @@ export default function StandingsScreen({ matches }) {
   return (
     <>
       <PrizeBanner />
+      <Bracket matches={matches} />
       <DayStars />
       {groupsOver && (
         <button onClick={() => setShowGroups(!showGroups)} style={{

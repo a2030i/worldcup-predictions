@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { C } from "../theme";
-import { NAMES, ALL_MATCHES } from "../data/tournament";
+import { NAMES, ALL_MATCHES, flag } from "../data/tournament";
 import {
-  myChallenges, createChallenge, joinChallenge, leaderboard, matchPredictions, myRanks,
+  myChallenges, createChallenge, joinChallenge, leaderboard, leaderboardKnockout, matchPredictions, myRanks,
   challengeSetLock, challengeRegenCode, challengeKick, challengeMembers,
 } from "../lib/api";
 import { countWord } from "../lib/format";
@@ -194,13 +194,21 @@ function OwnerTools({ ch, code, onCode }) {
 /* داخل التحدي: لوحة الصدارة + توقعات الأعضاء للمباريات المقفلة */
 function ChallengeView({ ch, matches, onBack }) {
   const [board, setBoard] = useState(null);
+  const [scope, setScope] = useState("all"); // all = التحدي الكامل · ko = سباق الإقصائيات
   const [matchId, setMatchId] = useState("");
   const [preds, setPreds] = useState(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [code, setCode] = useState(ch.code); // قد يتجدد من أدوات المالك
 
-  useEffect(() => { leaderboard(ch.id).then(setBoard).catch((e) => setErr(e.message)); }, [ch.id]);
+  // السباق يظهر فقط بعد بدء الإقصائيات فعلًا
+  const hasKnockouts = (matches || []).some((m) => m.stage && m.stage !== "group");
+
+  useEffect(() => {
+    setBoard(null); setErr("");
+    (scope === "ko" ? leaderboardKnockout(ch.id) : leaderboard(ch.id))
+      .then(setBoard).catch((e) => setErr(e.message));
+  }, [ch.id, scope]);
 
   // المباريات المقفلة فقط (توقعات الأعضاء تنكشف بعد القفل) — من بيانات الخادم
   // لتشمل الإقصائيات المضافة ديناميكيًا، لا من جدول المجموعات الثابت وحده
@@ -220,6 +228,7 @@ function ChallengeView({ ch, matches, onBack }) {
     if (!id) return;
     try { setPreds(await matchPredictions(ch.id, id)); } catch (e) { setErr(e.message); }
   };
+  const selMatch = lockedMatches.find((m) => m.id === matchId);
 
   const copyCode = async () => {
     try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }
@@ -261,6 +270,24 @@ function ChallengeView({ ch, matches, onBack }) {
         </div>
       )}
       {ch.is_owner && ch.type === "private" && <OwnerTools ch={ch} code={code} onCode={setCode} />}
+
+      {hasKnockouts && (
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          {[["all", "🏆 التحدي الكامل"], ["ko", "🏁 سباق الإقصائيات"]].map(([s, label]) => (
+            <button key={s} onClick={() => setScope(s)} style={{
+              flex: 1, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12.5,
+              padding: "10px 8px", borderRadius: 12,
+              border: `1px solid ${scope === s ? "#2B6BE4" : C.line}`,
+              background: scope === s ? "#2B6BE4" : C.card, color: scope === s ? "#FFFFFF" : C.muted,
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
+      {scope === "ko" && (
+        <p style={{ color: C.muted, fontSize: 11.5, textAlign: "center", margin: "8px 0 0", lineHeight: 1.7 }}>
+          سباق جديد يبدأ من صفر لكل الأعضاء — يحتسب مباريات الأدوار الإقصائية فقط، فرصتك للانقضاض! 🏁
+        </p>
+      )}
 
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, padding: "8px 14px", marginTop: 8 }}>
         <div style={{ display: "flex", color: C.muted, fontSize: 11, fontWeight: 700, padding: "8px 2px", borderBottom: `1px solid ${C.line}` }}>
@@ -305,9 +332,12 @@ function ChallengeView({ ch, matches, onBack }) {
               <div key={`${p.username}-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 0", fontSize: 13.5, borderBottom: i === preds.length - 1 ? "none" : `1px solid ${C.line}` }}>
                 <span style={{ flex: 1, color: C.text, fontWeight: 700, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.username}</span>
                 <span className="num" dir="ltr" style={{ color: C.muted, fontSize: 10.5, opacity: 0.8 }}>
-                  {new Date(p.predicted_at).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  {new Date(p.predicted_at).toLocaleTimeString("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                 </span>
-                <span className="num" style={{ color: C.muted }}>{p.h}–{p.a}</span>
+                {/* الرقم ملتصق بعلم منتخبه — «2–1» وحدها ملتبسة في RTL */}
+                <span className="num" dir="ltr" style={{ color: C.muted }}>
+                  {selMatch ? `${flag(selMatch.a)} ` : ""}{p.h}–{p.a}{selMatch ? ` ${flag(selMatch.b)}` : ""}
+                </span>
                 <span className="num" style={{ width: 50, textAlign: "left", color: p.points > 0 ? C.gold : C.muted, fontWeight: 800 }}>
                   {p.points > 0 ? `+${p.points}` : "—"}
                 </span>

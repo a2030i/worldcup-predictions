@@ -309,6 +309,38 @@ begin
       from wc.memberships mb join wc.challenges c on c.id = mb.challenge_id where mb.user_id = t.id));
 end $function$;
 
+-- ⑥ب سباق الإقصائيات 🏁 — لوحة موازية تحتسب مباريات الأدوار الإقصائية فقط
+-- (بداية جديدة للجميع من صفر — محرك عودة لمن تأخر، واللوحة الرئيسية لا تُمس)
+create or replace function public.leaderboard_knockout(p_token uuid, p_challenge_id uuid)
+ returns table(rank bigint, username text, points bigint, exact_count bigint, direction_count bigint, played bigint)
+ language plpgsql security definer set search_path to 'wc', 'public' as $function$
+declare u wc.profiles;
+begin
+  u := wc._auth(p_token);
+  if not exists (select 1 from wc.memberships where user_id = u.id and challenge_id = p_challenge_id)
+    then raise exception 'NOT_A_MEMBER'; end if;
+  return query
+  with scored as (
+    select pr.id as uid, pr.display_name as dname,
+      coalesce(sum(wc.match_points(p.h, p.a, p.qualified, m.result_h, m.result_a, m.qualified, m.stage) * (case when p.joker then 2 else 1 end)), 0) as pts,
+      count(*) filter (where p.h = m.result_h and p.a = m.result_a) as ex,
+      count(*) filter (where sign(p.h - p.a) = sign(m.result_h - m.result_a)) as dir,
+      (select count(*) from wc.predictions pp join wc.matches mx on mx.id = pp.match_id
+        where pp.user_id = pr.id and mx.stage <> 'group') as tot,
+      avg(extract(epoch from p.updated_at)) filter (where p.h = m.result_h and p.a = m.result_a) as tb
+    from wc.memberships mb
+    join wc.profiles pr on pr.id = mb.user_id and not pr.is_banned
+    left join wc.predictions p on p.user_id = mb.user_id
+    left join wc.matches m on m.id = p.match_id and m.status = 'finished'
+         and m.stage <> 'group'                       -- ← الإقصائيات فقط
+         and m.kickoff_at >= mb.joined_at
+    where mb.challenge_id = p_challenge_id
+    group by pr.id, pr.display_name)
+  select rank() over (order by s.pts desc, s.tb asc nulls last), s.dname, s.pts, s.ex, s.dir, s.tot
+  from scored s order by s.pts desc, s.tb asc nulls last, s.dname;
+end $function$;
+grant execute on function public.leaderboard_knockout(uuid, uuid) to anon, authenticated;
+
 -- ⑦ البذر التلقائي المبكر لمباريات الإقصائيات (كل 30 دقيقة)
 alter table wc.sync_config add column if not exists last_seed_run timestamptz;
 alter table wc.sync_config add column if not exists last_seed_status text;
